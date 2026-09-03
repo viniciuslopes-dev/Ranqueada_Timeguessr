@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import handler from './api.mts'
+import handler from '../netlify/functions/api.mts'
 
 const originalDatabaseUrl = process.env.DATABASE_URL
 
