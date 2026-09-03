@@ -7,8 +7,8 @@ const players: Player[] = [
   { id: 'b', room_id: 'r', nickname: 'Beto', color: '#4f7cff', created_at: '' },
 ]
 const matches: GameMatch[] = [
-  { id: 'm1', room_id: 'r', title: 'Um', played_at: '2026-01-01', created_at: '' },
-  { id: 'm2', room_id: 'r', title: 'Dois', played_at: '2026-01-02', created_at: '' },
+  { id: 'm1', room_id: 'r', title: 'Um', game_number: null, played_at: '2026-01-01', created_at: '' },
+  { id: 'm2', room_id: 'r', title: 'Dois', game_number: null, played_at: '2026-01-02', created_at: '' },
 ]
 const scores: Score[] = [
   { id: '1', room_id: 'r', match_id: 'm1', player_id: 'a', score: 40000, created_at: '' },

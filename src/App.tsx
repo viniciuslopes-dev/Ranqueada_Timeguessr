@@ -5,7 +5,7 @@ import { MatchSheet, PlayerSheet, ShareSheet } from './components/Sheets'
 import { InsightsView, MatchesView, PlayersView, RankingView } from './components/Views'
 import { Brand, Spinner } from './components/ui'
 import { repository } from './lib/neonRepository'
-import type { GameMatch, MatchInput, Player, RankingMetric, RoomSnapshot } from './types'
+import type { GameMatch, ImportResultInput, MatchInput, Player, RankingMetric, RoomSnapshot } from './types'
 
 const ACTIVE_ROOM_KEY = 'cronorank:active-room'
 type ViewName = 'ranking' | 'matches' | 'players' | 'insights'
@@ -172,6 +172,7 @@ export default function App() {
   }
 
   const saveMatch = (input: MatchInput) => mutate(() => repository.addMatch(snapshot!.room.id, input), 'Partida salva. Ranking atualizado!')
+  const importResult = (input: ImportResultInput) => mutate(() => repository.importResult(snapshot!.room.id, input), 'Resultado importado com as 5 rodadas!')
   const savePlayer = (nickname: string, color: string) => mutate(
     () => editingPlayer ? repository.updatePlayer(editingPlayer, nickname, color) : repository.addPlayer(snapshot!.room.id, nickname, color),
     editingPlayer ? 'Jogador atualizado!' : `${nickname} entrou na disputa!`,
@@ -252,7 +253,7 @@ export default function App() {
         <NavButton active={view === 'insights'} icon={<BarChart3 />} label="Estatísticas" onClick={() => setView('insights')} />
       </nav>
 
-      {modal === 'match' && <MatchSheet players={snapshot.players} matchNumber={snapshot.matches.length + 1} busy={busy} onClose={() => setModal(null)} onSave={saveMatch} />}
+      {modal === 'match' && <MatchSheet players={snapshot.players} matchNumber={snapshot.matches.length + 1} busy={busy} onClose={() => setModal(null)} onSave={saveMatch} onImport={importResult} />}
       {modal === 'player' && <PlayerSheet player={editingPlayer} busy={busy} onClose={() => { setModal(null); setEditingPlayer(undefined) }} onSave={savePlayer} onDelete={editingPlayer ? deletePlayer : undefined} />}
       {modal === 'share' && <ShareSheet room={snapshot.room} onClose={() => setModal(null)} onToast={showToast} />}
       {toast && <div className="toast" role="status"><RefreshCw size={16} /> {toast}</div>}

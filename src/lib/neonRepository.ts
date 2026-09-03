@@ -1,4 +1,4 @@
-import type { MatchInput, Player, RoomSnapshot } from '../types'
+import type { ImportResultInput, MatchInput, Player, RoomSnapshot } from '../types'
 import { isNeonApiEnabled, neonApi } from './api'
 
 const DEMO_STORAGE_KEY = 'cronorank:demo-data:v1'
@@ -27,10 +27,10 @@ function seedDemo(): RoomSnapshot {
     { id: 'demo-theo', room_id: DEMO_ROOM_ID, nickname: 'Theo', color: '#23a982', created_at: new Date().toISOString() },
   ]
   const matches = [
-    { id: 'demo-match-1', room_id: DEMO_ROOM_ID, title: 'Daily #1189', played_at: daysAgo(6), created_at: new Date().toISOString() },
-    { id: 'demo-match-2', room_id: DEMO_ROOM_ID, title: 'Daily #1190', played_at: daysAgo(4), created_at: new Date().toISOString() },
-    { id: 'demo-match-3', room_id: DEMO_ROOM_ID, title: 'Sextou pelo mundo', played_at: daysAgo(2), created_at: new Date().toISOString() },
-    { id: 'demo-match-4', room_id: DEMO_ROOM_ID, title: 'Daily de hoje', played_at: today(), created_at: new Date().toISOString() },
+    { id: 'demo-match-1', room_id: DEMO_ROOM_ID, title: 'Daily #1189', game_number: null, played_at: daysAgo(6), created_at: new Date().toISOString() },
+    { id: 'demo-match-2', room_id: DEMO_ROOM_ID, title: 'Daily #1190', game_number: null, played_at: daysAgo(4), created_at: new Date().toISOString() },
+    { id: 'demo-match-3', room_id: DEMO_ROOM_ID, title: 'Sextou pelo mundo', game_number: null, played_at: daysAgo(2), created_at: new Date().toISOString() },
+    { id: 'demo-match-4', room_id: DEMO_ROOM_ID, title: 'Daily de hoje', game_number: null, played_at: today(), created_at: new Date().toISOString() },
   ]
   const values = [
     [42180, 39840, 44760, 36220],
@@ -50,6 +50,7 @@ function seedDemo(): RoomSnapshot {
       score: values[matchIndex][playerIndex],
       created_at: new Date().toISOString(),
     }))),
+    rounds: [],
   }
 }
 
@@ -81,6 +82,8 @@ export const repository = {
     if (isNeonApiEnabled) return neonApi.loadRoom(roomId, requireToken(roomId))
     const snapshot = getDemoData()[roomId]
     if (!snapshot) throw new Error('Sala não encontrada neste aparelho.')
+    snapshot.rounds ??= []
+    snapshot.matches = snapshot.matches.map((match) => ({ ...match, game_number: match.game_number ?? null }))
     return structuredClone(snapshot)
   },
 
@@ -95,7 +98,7 @@ export const repository = {
     saveDemoRoom({
       room: { id: roomId, name, invite_code: code, created_at: new Date().toISOString() },
       players: [{ id: uid(), room_id: roomId, nickname, color: '#ff7043', created_at: new Date().toISOString() }],
-      matches: [], scores: [],
+      matches: [], scores: [], rounds: [],
     })
     return { roomId, code }
   },
@@ -130,6 +133,7 @@ export const repository = {
     const room = await this.loadRoom(player.room_id)
     room.players = room.players.filter((item) => item.id !== player.id)
     room.scores = room.scores.filter((item) => item.player_id !== player.id)
+    room.rounds = room.rounds.filter((item) => item.player_id !== player.id)
     saveDemoRoom(room)
   },
 
@@ -138,9 +142,36 @@ export const repository = {
     const room = await this.loadRoom(roomId)
     const matchId = uid()
     const createdAt = new Date().toISOString()
-    room.matches.push({ id: matchId, room_id: roomId, title: input.title, played_at: input.playedAt, created_at: createdAt })
+    room.matches.push({ id: matchId, room_id: roomId, title: input.title, game_number: null, played_at: input.playedAt, created_at: createdAt })
     room.scores.push(...input.scores.map((item) => ({
       id: uid(), room_id: roomId, match_id: matchId, player_id: item.playerId, score: item.score, created_at: createdAt,
+    })))
+    saveDemoRoom(room)
+  },
+
+  async importResult(roomId: string, input: ImportResultInput) {
+    if (isNeonApiEnabled) { await neonApi.importResult(roomId, input, requireToken(roomId)); return }
+    const room = await this.loadRoom(roomId)
+    const createdAt = new Date().toISOString()
+    let match = room.matches.find((item) => item.game_number === input.gameNumber)
+    if (!match) {
+      match = {
+        id: uid(), room_id: roomId, title: `TimeGuessr #${input.gameNumber}`,
+        game_number: input.gameNumber, played_at: input.playedAt, created_at: createdAt,
+      }
+      room.matches.push(match)
+    }
+    const currentScore = room.scores.find((item) => item.match_id === match.id && item.player_id === input.playerId)
+    if (currentScore) currentScore.score = input.totalScore
+    else room.scores.push({
+      id: uid(), room_id: roomId, match_id: match.id, player_id: input.playerId,
+      score: input.totalScore, created_at: createdAt,
+    })
+    room.rounds = room.rounds.filter((item) => item.match_id !== match.id || item.player_id !== input.playerId)
+    room.rounds.push(...input.rounds.map((round) => ({
+      id: uid(), room_id: roomId, match_id: match!.id, player_id: input.playerId,
+      round_number: round.roundNumber, round_score: round.roundScore,
+      year_error: round.yearError, distance_km: round.distanceKm, created_at: createdAt,
     })))
     saveDemoRoom(room)
   },
@@ -150,6 +181,7 @@ export const repository = {
     const room = await this.loadRoom(roomId)
     room.matches = room.matches.filter((item) => item.id !== matchId)
     room.scores = room.scores.filter((item) => item.match_id !== matchId)
+    room.rounds = room.rounds.filter((item) => item.match_id !== matchId)
     saveDemoRoom(room)
   },
 

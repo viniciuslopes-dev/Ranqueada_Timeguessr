@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Check, Copy, Share2, Trash2 } from 'lucide-react'
-import type { MatchInput, Player, Room } from '../types'
+import { Check, CheckCircle2, Clock3, Copy, Globe2, Keyboard, ClipboardPaste, Share2, Trophy, Trash2 } from 'lucide-react'
+import type { ImportResultInput, MatchInput, Player, Room } from '../types'
+import { parseTimeGuessrShare } from '../lib/timeguessrParser'
 import { PLAYER_COLORS, PlayerAvatar, Sheet } from './ui'
 
 type MatchSheetProps = {
@@ -9,18 +10,28 @@ type MatchSheetProps = {
   busy: boolean
   onClose: () => void
   onSave: (input: MatchInput) => Promise<void>
+  onImport: (input: ImportResultInput) => Promise<void>
 }
 
-export function MatchSheet({ players, matchNumber, busy, onClose, onSave }: MatchSheetProps) {
+export function MatchSheet({ players, matchNumber, busy, onClose, onSave, onImport }: MatchSheetProps) {
+  const [mode, setMode] = useState<'paste' | 'manual'>('paste')
   const [title, setTitle] = useState(`Daily #${matchNumber}`)
   const [playedAt, setPlayedAt] = useState(new Date().toISOString().slice(0, 10))
   const [active, setActive] = useState<Record<string, boolean>>(() => Object.fromEntries(players.map((player) => [player.id, true])))
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(players.map((player) => [player.id, ''])))
   const [error, setError] = useState('')
+  const [shareText, setShareText] = useState('')
+  const [selectedPlayerId, setSelectedPlayerId] = useState(players[0]?.id ?? '')
+  const [importDate, setImportDate] = useState(new Date().toISOString().slice(0, 10))
 
   const activeCount = Object.values(active).filter(Boolean).length
+  const parsed = useMemo(() => {
+    if (!shareText.trim()) return { result: null, error: '' }
+    try { return { result: parseTimeGuessrShare(shareText), error: '' } }
+    catch (parseError) { return { result: null, error: parseError instanceof Error ? parseError.message : 'Não foi possível ler o resultado.' } }
+  }, [shareText])
 
-  const submit = async (event: FormEvent) => {
+  const submitManual = async (event: FormEvent) => {
     event.preventDefault()
     setError('')
     const scores = players
@@ -33,9 +44,86 @@ export function MatchSheet({ players, matchNumber, busy, onClose, onSave }: Matc
     await onSave({ title: title.trim() || `Partida #${matchNumber}`, playedAt, scores })
   }
 
+  const submitImport = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!parsed.result) return
+    if (!selectedPlayerId) return setError('Escolha quem fez esse resultado.')
+    setError('')
+    await onImport({ playerId: selectedPlayerId, playedAt: importDate, ...parsed.result })
+  }
+
   return (
-    <Sheet title="Nova partida" subtitle="Vale até 50.000 pontos" onClose={onClose}>
-      <form className="sheet-form" onSubmit={submit}>
+    <Sheet title="Nova partida" subtitle="Cole o resultado do WhatsApp ou digite os placares" onClose={onClose}>
+      <div className="segmented segmented--wide entry-mode" aria-label="Forma de cadastrar resultado">
+        <button className={mode === 'paste' ? 'active' : ''} type="button" onClick={() => { setMode('paste'); setError('') }}><ClipboardPaste size={17} /> Colar resultado</button>
+        <button className={mode === 'manual' ? 'active' : ''} type="button" onClick={() => { setMode('manual'); setError('') }}><Keyboard size={17} /> Digitar placares</button>
+      </div>
+
+      {mode === 'paste' ? (
+        <form className="sheet-form" onSubmit={submitImport}>
+          <label className="field paste-field">
+            <span>Mensagem compartilhada pelo TimeGuessr</span>
+            <textarea
+              autoFocus
+              value={shareText}
+              onChange={(event) => setShareText(event.target.value)}
+              placeholder={'TimeGuessr #1191 — 27,839/50,000\n1️⃣ 🏆6.756 · 📅 5y · 🌍 1288.5km\n…'}
+              rows={7}
+            />
+            <small>Copie a mensagem inteira no WhatsApp e cole aqui.</small>
+          </label>
+
+          {parsed.error && <p className="form-error" role="alert">{parsed.error}</p>}
+          {parsed.result && (
+            <div className="import-preview">
+              <header>
+                <span><CheckCircle2 size={18} /> Resultado reconhecido</span>
+                <strong>#{parsed.result.gameNumber} · {parsed.result.totalScore.toLocaleString('pt-BR')} pts</strong>
+              </header>
+              <div className="round-preview" aria-label="Detalhes das cinco rodadas">
+                {parsed.result.rounds.map((round) => (
+                  <div key={round.roundNumber}>
+                    <b>{round.roundNumber}</b>
+                    <span><Trophy size={13} /> {round.roundScore.toLocaleString('pt-BR')}</span>
+                    <span><Clock3 size={13} /> {round.yearError} ano{round.yearError === 1 ? '' : 's'}</span>
+                    <span><Globe2 size={13} /> {round.distanceKm.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} km</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="import-assignment">
+            <div className="score-heading"><div><strong>De quem é o resultado?</strong><span>Vincule ao nick cadastrado</span></div></div>
+            <div className="import-player-list" role="radiogroup" aria-label="Jogador do resultado">
+              {players.map((player) => (
+                <button
+                  className={selectedPlayerId === player.id ? 'active' : ''}
+                  type="button"
+                  role="radio"
+                  aria-checked={selectedPlayerId === player.id}
+                  key={player.id}
+                  onClick={() => setSelectedPlayerId(player.id)}
+                >
+                  <PlayerAvatar player={player} size="sm" />
+                  <span>{player.nickname}</span>
+                  <i>{selectedPlayerId === player.id && <Check size={12} />}</i>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="field field--date import-date">
+            <span>Data da partida</span>
+            <input type="date" value={importDate} onChange={(event) => setImportDate(event.target.value)} required />
+          </label>
+          {error && <p className="form-error" role="alert">{error}</p>}
+          <button className="primary-button primary-button--large" type="submit" disabled={busy || !parsed.result}>
+            {busy ? 'Importando resultado…' : parsed.result ? `Importar para ${players.find((player) => player.id === selectedPlayerId)?.nickname ?? 'jogador'}` : 'Cole um resultado para continuar'}
+          </button>
+        </form>
+      ) : (
+      <form className="sheet-form" onSubmit={submitManual}>
         <div className="field-grid">
           <label className="field">
             <span>Nome da partida</span>
@@ -82,6 +170,7 @@ export function MatchSheet({ players, matchNumber, busy, onClose, onSave }: Matc
           {busy ? 'Salvando placares…' : 'Salvar e ver o ranking'}
         </button>
       </form>
+      )}
     </Sheet>
   )
 }

@@ -1,4 +1,4 @@
-import { BarChart3, CalendarDays, ChevronRight, Crown, Edit3, Flame, Medal, Plus, Sparkles, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users } from 'lucide-react'
+import { BarChart3, CalendarDays, ChevronDown, ChevronRight, Clock3, Crown, Edit3, Globe2, Plus, Sparkles, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users } from 'lucide-react'
 import type { GameMatch, Player, PlayerRanking, RankingMetric, RoomSnapshot, Score } from '../types'
 import { buildRanking, formatScore, formatShortDate, getWinnerIds } from '../lib/ranking'
 import { EmptyState, PlayerAvatar } from './ui'
@@ -136,12 +136,35 @@ function MatchCard({ match, snapshot, index, onDelete }: { match: GameMatch; sna
         {values.map((score, scoreIndex) => {
           const player = snapshot.players.find((item) => item.id === score.player_id)
           if (!player) return null
-          return (
-            <div key={score.id}>
+          const details = (snapshot.rounds ?? [])
+            .filter((round) => round.match_id === match.id && round.player_id === player.id)
+            .sort((a, b) => a.round_number - b.round_number)
+          const resultSummary = (
+            <>
               <span className="mini-position">{winnerIds.includes(player.id) ? '🏆' : scoreIndex + 1}</span>
               <PlayerAvatar player={player} size="sm" />
               <strong>{player.nickname}</strong>
-              <span>{formatScore(score.score)}</span>
+              <span className="match-score-value">{formatScore(score.score)}</span>
+            </>
+          )
+          if (details.length) return (
+            <details className="match-player-result" key={score.id}>
+              <summary>{resultSummary}<ChevronDown size={16} /></summary>
+              <div className="match-round-details">
+                {details.map((round) => (
+                  <div key={round.id}>
+                    <b>{round.round_number}</b>
+                    <span><Trophy size={12} /> {formatScore(round.round_score)}</span>
+                    <span><Clock3 size={12} /> {round.year_error} ano{round.year_error === 1 ? '' : 's'}</span>
+                    <span><Globe2 size={12} /> {round.distance_km.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} km</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )
+          return (
+            <div key={score.id}>
+              {resultSummary}
             </div>
           )
         })}
@@ -215,7 +238,22 @@ export function InsightsView({ snapshot }: { snapshot: RoomSnapshot }) {
   const allScores = snapshot.scores.map((item) => item.score)
   const best = allScores.length ? Math.max(...allScores) : 0
   const champion = ranking[0]
-  const hottest = [...ranking].sort((a, b) => b.trend - a.trend)[0]
+  const specialties = ranking.map((player) => {
+    const rounds = (snapshot.rounds ?? []).filter((round) => round.player_id === player.id)
+    const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length
+    return {
+      player,
+      rounds: rounds.length,
+      yearError: rounds.length ? average(rounds.map((round) => round.year_error)) : null,
+      distanceKm: rounds.length ? average(rounds.map((round) => round.distance_km)) : null,
+      roundScore: rounds.length ? average(rounds.map((round) => round.round_score)) : null,
+    }
+  })
+  const measured = specialties.filter((item) => item.rounds > 0)
+  const timeMaster = [...measured].sort((a, b) => a.yearError! - b.yearError!)[0]
+  const geoMaster = [...measured].sort((a, b) => a.distanceKm! - b.distanceKm!)[0]
+  const formatAverage = (value: number | null) => value === null ? '—' : value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })
+  const formatRoundAverage = (value: number | null) => value === null ? '—' : Math.round(value).toLocaleString('pt-BR')
 
   return (
     <div className="view-stack">
@@ -227,18 +265,36 @@ export function InsightsView({ snapshot }: { snapshot: RoomSnapshot }) {
           <div className="stat-grid">
             <article><span><CalendarDays size={18} /></span><strong>{snapshot.matches.length}</strong><small>partidas</small></article>
             <article><span><Target size={18} /></span><strong>{formatScore(best)}</strong><small>maior placar</small></article>
-            <article><span><Trophy size={18} /></span><strong>{champion?.wins ?? 0}</strong><small>vitórias do líder</small></article>
+            <article><span><Trophy size={18} /></span><strong>{snapshot.rounds?.length ?? 0}</strong><small>rodadas detalhadas</small></article>
           </div>
           <section className="chart-card">
             <div className="section-heading"><div><span className="section-kicker">PLACAR POR PARTIDA</span><h2>Corrida no tempo</h2></div></div>
             <EvolutionChart snapshot={snapshot} />
           </section>
           <section>
+            <div className="section-heading"><div><span className="section-kicker">PRECISÃO POR JOGADOR</span><h2>Especialidades</h2></div></div>
+            {measured.length ? (
+              <div className="specialty-card">
+                <div className="specialty-head"><span>Jogador</span><span>Ano</span><span>Mapa</span><span>Pontos</span></div>
+                {specialties.map((item) => (
+                  <div className="specialty-row" key={item.player.id}>
+                    <div><PlayerAvatar player={item.player} size="sm" /><strong>{item.player.nickname}</strong><small>{item.rounds ? `${item.rounds} rodadas` : 'sem detalhes'}</small></div>
+                    <span title="Erro médio em anos"><Clock3 size={14} /><strong>{formatAverage(item.yearError)}</strong><small>anos</small></span>
+                    <span title="Distância média"><Globe2 size={14} /><strong>{formatAverage(item.distanceKm)}</strong><small>km</small></span>
+                    <span title="Pontuação média por rodada"><Trophy size={14} /><strong>{formatRoundAverage(item.roundScore)}</strong><small>média</small></span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="detail-empty"><span className="detail-empty__icon">📋</span><div><strong>Os placares antigos continuam valendo</strong><p>Cole um resultado compartilhado para liberar as métricas de ano e mapa.</p></div></div>
+            )}
+          </section>
+          <section>
             <div className="section-heading"><div><span className="section-kicker">DESTAQUES</span><h2>Hall da fama</h2></div></div>
             <div className="achievement-grid">
               <article className="achievement achievement--gold"><span><Crown /></span><div><small>DONO DO TEMPO</small><strong>{champion?.nickname ?? '—'}</strong><p>Lidera o placar geral</p></div></article>
-              <article className="achievement achievement--coral"><span><Flame /></span><div><small>EM ASCENSÃO</small><strong>{hottest?.trend && hottest.trend > 0 ? hottest.nickname : 'Aguardando'}</strong><p>{hottest?.trend && hottest.trend > 0 ? `+${formatScore(hottest.trend)} na média` : 'Joguem mais partidas'}</p></div></article>
-              <article className="achievement achievement--blue"><span><Medal /></span><div><small>RECORDE ABSOLUTO</small><strong>{formatScore(best)}</strong><p>Melhor placar da liga</p></div></article>
+              <article className="achievement achievement--coral"><span><Clock3 /></span><div><small>MESTRE DO TEMPO</small><strong>{timeMaster?.player.nickname ?? 'Aguardando'}</strong><p>{timeMaster ? `${formatAverage(timeMaster.yearError)} anos de erro médio` : 'Importe resultados detalhados'}</p></div></article>
+              <article className="achievement achievement--blue"><span><Globe2 /></span><div><small>MESTRE DO MAPA</small><strong>{geoMaster?.player.nickname ?? 'Aguardando'}</strong><p>{geoMaster ? `${formatAverage(geoMaster.distanceKm)} km de distância média` : 'Importe resultados detalhados'}</p></div></article>
             </div>
           </section>
         </>

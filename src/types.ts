@@ -10,7 +10,20 @@ export type GameMatch = {
   id: string
   room_id: string
   title: string
+  game_number: number | null
   played_at: string
+  created_at: string
+}
+
+export type RoundDetail = {
+  id: string
+  room_id: string
+  match_id: string
+  player_id: string
+  round_number: number
+  round_score: number
+  year_error: number
+  distance_km: number
   created_at: string
 }
 
@@ -35,12 +48,26 @@ export type RoomSnapshot = {
   players: Player[]
   matches: GameMatch[]
   scores: Score[]
+  rounds: RoundDetail[]
 }
 
 export type MatchInput = {
   title: string
   playedAt: string
   scores: Array<{ playerId: string; score: number }>
+}
+
+export type ImportResultInput = {
+  playerId: string
+  gameNumber: number
+  playedAt: string
+  totalScore: number
+  rounds: Array<{
+    roundNumber: number
+    roundScore: number
+    yearError: number
+    distanceKm: number
+  }>
 }
 
 export type RankingMetric = 'total' | 'average' | 'wins'
