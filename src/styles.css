@@ -225,8 +225,10 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .stat-grid article > span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; margin-bottom: 5px; color: var(--coral-dark); background: #fff0eb; }
 .stat-grid strong { font-family: 'Space Grotesk', sans-serif; font-size: 19px; }
 .stat-grid small { color: var(--muted); font-size: 8px; text-transform: uppercase; }
-.chart-card { padding: 18px; background: #fff; border: 1px solid #e6e3dc; border-radius: 21px; }
+.chart-card { min-width: 0; max-width: 100%; overflow: hidden; padding: 18px; background: #fff; border: 1px solid #e6e3dc; border-radius: 21px; }
+.chart-scroll-area, .chart-wrap, .chart-stage { min-width: 0; max-width: 100%; }
 .chart-wrap { width: 100%; overflow: hidden; }
+.chart-swipe-hint { display: none; }
 .line-chart { display: block; width: 100%; overflow: visible; }
 .line-chart line { stroke: #e9e7e2; stroke-width: 1; stroke-dasharray: 4 5; }
 .line-chart text { fill: #929aaa; font-size: 9px; text-anchor: end; font-family: 'DM Sans'; }
@@ -367,6 +369,7 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 }
 
 @media (max-width: 520px) {
+  .app-shell { overflow-x: clip; }
   .topbar { padding-left: 14px; padding-right: 14px; }
   .brand--compact span { display: none; }
   .topbar__leave { display: none; }
@@ -388,10 +391,21 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
   .field--date { width: 100%; }
   .stat-grid article { padding: 10px; min-width: 0; }
   .stat-grid strong { font-size: 15px; }
-  .chart-card { margin-left: -4px; margin-right: -4px; padding: 14px 8px; }
-  .line-chart { min-width: 520px; }
-  .chart-wrap { overflow-x: auto; padding-bottom: 4px; }
-  .chart-legend { position: sticky; left: 0; width: calc(100vw - 44px); }
+  .view-stack, .view-stack > *, .chart-scroll-area { min-width: 0; max-width: 100%; }
+  .chart-card { margin-left: -4px; margin-right: -4px; padding: 14px 0 10px; }
+  .chart-card > .section-heading { padding: 0 12px; }
+  .chart-swipe-hint { min-height: 28px; margin: -5px 12px 5px; display: flex; align-items: center; gap: 6px; color: #738099; font-size: 9px; font-weight: 700; }
+  .chart-swipe-hint svg { color: var(--coral-dark); }
+  .chart-scroll-area { position: relative; overflow: hidden; }
+  .chart-scroll-area::after { content: ''; position: absolute; z-index: 2; right: 0; top: 28px; bottom: 8px; width: 22px; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(255,255,255,.92)); }
+  .chart-wrap { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 0 0 8px; scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: #bbc2ce #eeece7; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; }
+  .chart-wrap:focus-visible { outline: 2px solid rgba(79, 124, 255, .35); outline-offset: -2px; }
+  .chart-wrap::-webkit-scrollbar { height: 5px; }
+  .chart-wrap::-webkit-scrollbar-track { background: #eeece7; border-radius: 99px; }
+  .chart-wrap::-webkit-scrollbar-thumb { background: #bbc2ce; border-radius: 99px; }
+  .chart-stage { width: 680px; min-width: 680px; max-width: none; padding: 0 10px; }
+  .line-chart { width: 660px; min-width: 660px; }
+  .chart-legend { width: 660px; }
   .specialty-head, .specialty-row { grid-template-columns: minmax(108px, 1.3fr) repeat(3, minmax(54px, .65fr)); gap: 3px; padding-left: 8px; padding-right: 8px; }
   .specialty-row > div { gap: 0 5px; }
   .specialty-row > span { column-gap: 2px; }

@@ -1,4 +1,4 @@
-import { BarChart3, CalendarDays, ChevronDown, ChevronRight, Clock3, Crown, Edit3, Globe2, Plus, Sparkles, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users } from 'lucide-react'
+import { BarChart3, CalendarDays, ChevronDown, ChevronRight, Clock3, Crown, Edit3, Globe2, MoveHorizontal, Plus, Sparkles, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users } from 'lucide-react'
 import type { GameMatch, Player, PlayerRanking, RankingMetric, RoomSnapshot, Score } from '../types'
 import { buildRanking, formatScore, formatShortDate, getWinnerIds } from '../lib/ranking'
 import { EmptyState, PlayerAvatar } from './ui'
@@ -317,8 +317,11 @@ function EvolutionChart({ snapshot }: { snapshot: RoomSnapshot }) {
   })
 
   return (
-    <div className="chart-wrap">
-      <svg className="line-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Evolução de pontuação dos melhores jogadores">
+    <div className="chart-scroll-area">
+      <p className="chart-swipe-hint"><MoveHorizontal size={15} /> Deslize o gráfico para os lados</p>
+      <div className="chart-wrap" tabIndex={0} role="region" aria-label="Gráfico com rolagem horizontal">
+        <div className="chart-stage">
+          <svg className="line-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Evolução de pontuação dos melhores jogadores">
         {[0, 10000, 20000, 30000, 40000, 50000].map((tick) => {
           const y = point(0, tick).y
           return <g key={tick}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} /><text x={padding.left - 8} y={y + 4}>{tick / 1000}k</text></g>
@@ -338,8 +341,10 @@ function EvolutionChart({ snapshot }: { snapshot: RoomSnapshot }) {
           )
         })}
         {matches.map((match, index) => <text className="x-label" key={match.id} x={point(index, 0).x} y={height - 8}>{formatShortDate(match.played_at)}</text>)}
-      </svg>
-      <div className="chart-legend">{players.map((player) => <span key={player.id}><i style={{ background: player.color }} />{player.nickname}</span>)}</div>
+          </svg>
+          <div className="chart-legend">{players.map((player) => <span key={player.id}><i style={{ background: player.color }} />{player.nickname}</span>)}</div>
+        </div>
+      </div>
     </div>
   )
 }
