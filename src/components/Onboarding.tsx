@@ -49,7 +49,7 @@ export function Onboarding({ isDemo, initialCode, busy, error, onCreate, onJoin,
         {isDemo && (
           <div className="local-notice">
             <strong>Modo local ativo</strong>
-            <span>Você pode testar tudo agora. Para compartilhar com amigos, conecte o Supabase seguindo o guia do projeto.</span>
+            <span>Você pode testar tudo agora. Para compartilhar com amigos, conecte o Neon seguindo o guia do projeto.</span>
           </div>
         )}
 

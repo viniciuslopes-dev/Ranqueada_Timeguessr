@@ -27,18 +27,7 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: '/index.html',
-        globPatterns: ['**/*.{js,css,html,svg,woff2}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/v1\//,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'cronorank-api',
-              networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 30, maxAgeSeconds: 86400 }
-            }
-          }
-        ]
+        globPatterns: ['**/*.{js,css,html,svg,png,woff2}']
       }
     })
   ]

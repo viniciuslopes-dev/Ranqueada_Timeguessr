@@ -4,7 +4,7 @@ import { Onboarding } from './components/Onboarding'
 import { MatchSheet, PlayerSheet, ShareSheet } from './components/Sheets'
 import { InsightsView, MatchesView, PlayersView, RankingView } from './components/Views'
 import { Brand, Spinner } from './components/ui'
-import { repository } from './lib/repository'
+import { repository } from './lib/neonRepository'
 import type { GameMatch, MatchInput, Player, RankingMetric, RoomSnapshot } from './types'
 
 const ACTIVE_ROOM_KEY = 'cronorank:active-room'
@@ -21,7 +21,7 @@ function readableError(error: unknown): string {
   if (/duplicate|unique/i.test(message)) return 'Esse nick já está na liga. Escolha outro.'
   if (/not found|não encontr|P0002/i.test(message)) return 'Não encontramos essa liga. Confira o código.'
   if (/row-level|policy|permission/i.test(message)) return 'Seu acesso à liga expirou. Entre novamente pelo código.'
-  if (/anonymous|signup|disabled/i.test(message)) return 'Ative “Anonymous Sign-Ins” no painel do Supabase.'
+  if (/DATABASE_URL/i.test(message)) return 'Configure a DATABASE_URL do Neon na Netlify.'
   if (/fetch|network/i.test(message)) return 'Sem conexão com o banco. Confira sua internet e tente de novo.'
   return message || 'Algo saiu do mapa. Tente novamente.'
 }

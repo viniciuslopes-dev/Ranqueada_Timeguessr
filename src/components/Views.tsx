@@ -44,7 +44,7 @@ export function RankingView({ snapshot, metric, onMetric, onNewMatch }: RankingP
       <section>
         <div className="section-heading">
           <div><span className="section-kicker">PLACAR GERAL</span><h2>Ranking da liga</h2></div>
-          <span className="live-pill"><i /> ao vivo</span>
+          <span className="live-pill"><i /> sincronizado</span>
         </div>
         <div className="segmented ranking-filter" role="tablist" aria-label="Critério do ranking">
           <button type="button" className={metric === 'total' ? 'active' : ''} onClick={() => onMetric('total')}>Pontos</button>
