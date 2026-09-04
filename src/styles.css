@@ -229,6 +229,7 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .stat-grid article > span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; margin-bottom: 5px; color: var(--coral-dark); background: #fff0eb; }
 .stat-grid strong { font-family: 'Space Grotesk', sans-serif; font-size: 19px; }
 .stat-grid small { color: var(--muted); font-size: 8px; text-transform: uppercase; }
+.stat-owner { margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--navy); font-size: 9px; font-style: normal; font-weight: 800; }
 .chart-card { min-width: 0; max-width: 100%; overflow: hidden; padding: 18px; background: #fff; border: 1px solid #e6e3dc; border-radius: 21px; }
 .chart-scroll-area, .chart-wrap, .chart-stage { min-width: 0; max-width: 100%; }
 .chart-wrap { width: 100%; overflow: hidden; }
@@ -248,6 +249,7 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .achievement--gold > span { color: #9a7100; background: #fff2bd; }
 .achievement--coral > span { color: #cc4f2c; background: #ffe6de; }
 .achievement--blue > span { color: #406bdf; background: #e9efff; }
+.achievement--mint > span { color: #1c7a5e; background: #dcf3ea; }
 .achievement > div { display: grid; }
 .achievement small { color: var(--muted); font-size: 8px; font-weight: 800; letter-spacing: .09em; }
 .achievement strong { margin: 1px 0; font-family: 'Space Grotesk', sans-serif; font-size: 14px; }
@@ -360,7 +362,7 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 
 @media (min-width: 720px) {
   .player-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .achievement-grid { grid-template-columns: repeat(3, 1fr); }
+  .achievement-grid { grid-template-columns: repeat(2, 1fr); }
   .achievement { min-height: 145px; flex-direction: column; align-items: flex-start; justify-content: center; }
   .topbar__room > span { max-width: 300px; }
 }

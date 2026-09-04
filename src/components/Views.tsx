@@ -242,6 +242,11 @@ export function InsightsView({ snapshot }: { snapshot: RoomSnapshot }) {
   const ranking = buildRanking(snapshot.players, snapshot.matches, snapshot.scores)
   const allScores = snapshot.scores.map((item) => item.score)
   const best = allScores.length ? Math.max(...allScores) : 0
+  // o recorde pode estar empatado entre jogadores; guardamos todos os donos
+  const recordScores = allScores.length ? snapshot.scores.filter((item) => item.score === best) : []
+  const recordHolders = ranking.filter((player) => recordScores.some((item) => item.player_id === player.id))
+  const recordNames = recordHolders.map((player) => player.nickname).join(' e ')
+  const recordMatch = snapshot.matches.find((match) => match.id === recordScores[0]?.match_id)
   const champion = ranking[0]
   const specialties = ranking.map((player) => {
     const rounds = (snapshot.rounds ?? []).filter((round) => round.player_id === player.id)
@@ -269,7 +274,7 @@ export function InsightsView({ snapshot }: { snapshot: RoomSnapshot }) {
         <>
           <div className="stat-grid">
             <article><span><CalendarDays size={18} /></span><strong>{snapshot.matches.length}</strong><small>partidas</small></article>
-            <article><span><Target size={18} /></span><strong>{formatScore(best)}</strong><small>maior placar</small></article>
+            <article><span><Target size={18} /></span><strong>{formatScore(best)}</strong><small>maior placar</small>{!!recordHolders.length && <em className="stat-owner">{recordNames}</em>}</article>
             <article><span><Trophy size={18} /></span><strong>{snapshot.rounds?.length ?? 0}</strong><small>rodadas detalhadas</small></article>
           </div>
           <section className="chart-card">
@@ -298,6 +303,7 @@ export function InsightsView({ snapshot }: { snapshot: RoomSnapshot }) {
             <div className="section-heading"><div><span className="section-kicker">DESTAQUES</span><h2>Hall da fama</h2></div></div>
             <div className="achievement-grid">
               <article className="achievement achievement--gold"><span><Crown /></span><div><small>DONO DO TEMPO</small><strong>{champion?.nickname ?? '—'}</strong><p>Lidera o placar geral</p></div></article>
+              <article className="achievement achievement--mint"><span><Target /></span><div><small>RECORDE ETERNO</small><strong>{recordNames || 'Aguardando'}</strong><p>{recordHolders.length ? `${formatScore(best)} pts${recordMatch ? ` em ${recordMatch.title}` : ''}` : 'Registre um placar para abrir o recorde'}</p></div></article>
               <article className="achievement achievement--coral"><span><Clock3 /></span><div><small>MESTRE DO TEMPO</small><strong>{timeMaster?.player.nickname ?? 'Aguardando'}</strong><p>{timeMaster ? `${formatAverage(timeMaster.yearError)} anos de erro médio` : 'Importe resultados detalhados'}</p></div></article>
               <article className="achievement achievement--blue"><span><Globe2 /></span><div><small>MESTRE DO MAPA</small><strong>{geoMaster?.player.nickname ?? 'Aguardando'}</strong><p>{geoMaster ? `${formatAverage(geoMaster.distanceKm)} km de distância média` : 'Importe resultados detalhados'}</p></div></article>
             </div>
