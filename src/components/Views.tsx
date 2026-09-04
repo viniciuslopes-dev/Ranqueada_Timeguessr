@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays, ChevronDown, ChevronRight, Clock3, Crown, Edit3, Globe2, MoveHorizontal, Plus, Sparkles, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays, CalendarRange, ChevronDown, ChevronRight, Clock3, Crown, Edit3, Globe2, MoveHorizontal, Plus, Sparkles, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users, X } from 'lucide-react'
 import type { GameMatch, Player, PlayerRanking, RankingMetric, RoomSnapshot, Score } from '../types'
 import { buildRanking, compareMatchesNewest, compareMatchesOldest, formatScore, formatShortDate, getWinnerIds } from '../lib/ranking'
+import { formatPeriodLabel, type DateRange, type Period, type PeriodPreset } from '../lib/period'
 import { EmptyState, PlayerAvatar } from './ui'
 
 const MEDALS = ['🥇', '🥈', '🥉']
@@ -27,14 +28,42 @@ const SPECIALTY_COLUMNS: Array<{ key: SpecialtyColumn; label: string; bestFirst:
 const formatAverage = (value: number | null) => value === null ? '—' : value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })
 const formatRoundAverage = (value: number | null) => value === null ? '—' : Math.round(value).toLocaleString('pt-BR')
 
+export function PeriodBar({ period, range, matchCount, onPreset, onCustom }: {
+  period: Period
+  range: DateRange
+  matchCount: number
+  onPreset: (preset: PeriodPreset) => void
+  onCustom: () => void
+}) {
+  return (
+    <div className="period-bar">
+      <div className="segmented period-filter" role="tablist" aria-label="Período dos resultados">
+        <button type="button" className={period.preset === 'all' ? 'active' : ''} onClick={() => onPreset('all')}>Tudo</button>
+        <button type="button" className={period.preset === 'week' ? 'active' : ''} onClick={() => onPreset('week')}>Semana</button>
+        <button type="button" className={period.preset === 'month' ? 'active' : ''} onClick={() => onPreset('month')}>Mês</button>
+        <button type="button" className={period.preset === 'custom' ? 'active' : ''} onClick={onCustom}><CalendarRange size={13} /> Período</button>
+      </div>
+      {range && (
+        <p className="period-summary">
+          <strong>{formatPeriodLabel(range)}</strong>
+          <span>{matchCount} partida{matchCount === 1 ? '' : 's'}</span>
+          <button type="button" onClick={() => onPreset('all')} aria-label="Limpar o filtro de período"><X size={13} /></button>
+        </p>
+      )}
+    </div>
+  )
+}
+
 type RankingProps = {
   snapshot: RoomSnapshot
   metric: RankingMetric
   onMetric: (metric: RankingMetric) => void
   onNewMatch: () => void
+  filtered: boolean
+  onClearPeriod: () => void
 }
 
-export function RankingView({ snapshot, metric, onMetric, onNewMatch }: RankingProps) {
+export function RankingView({ snapshot, metric, onMetric, onNewMatch, filtered, onClearPeriod }: RankingProps) {
   const ranking = buildRanking(snapshot.players, snapshot.matches, snapshot.scores, metric)
   const leader = ranking[0]
 
@@ -45,11 +74,20 @@ export function RankingView({ snapshot, metric, onMetric, onNewMatch }: RankingP
   return (
     <div className="view-stack">
       {!snapshot.matches.length ? (
+        filtered ? (
+          <EmptyState
+            title="Nenhuma partida nesse período"
+            text="Nada foi registrado entre as datas escolhidas."
+            icon={<CalendarRange size={28} />}
+            action={<button className="primary-button" type="button" onClick={onClearPeriod}>Ver todas as partidas</button>}
+          />
+        ) : (
         <section className="welcome-card">
           <span className="welcome-card__icon"><Sparkles size={22} /></span>
           <div><span>Tudo pronto!</span><h2>Registre a primeira viagem</h2><p>Adicione os placares e veja o pódio ganhar vida.</p></div>
           <button className="primary-button" type="button" onClick={onNewMatch}><Plus size={18} /> Nova partida</button>
         </section>
+        )
       ) : (
         <section className="leader-hero">
           <div className="leader-hero__map-lines" />
@@ -125,7 +163,7 @@ function Podium({ ranking, metric }: { ranking: PlayerRanking[]; metric: Ranking
   )
 }
 
-export function MatchesView({ snapshot, onNew, onEdit, onDelete }: { snapshot: RoomSnapshot; onNew: () => void; onEdit: (match: GameMatch) => void; onDelete: (match: GameMatch) => void }) {
+export function MatchesView({ snapshot, onNew, onEdit, onDelete, filtered, onClearPeriod }: { snapshot: RoomSnapshot; onNew: () => void; onEdit: (match: GameMatch) => void; onDelete: (match: GameMatch) => void; filtered: boolean; onClearPeriod: () => void }) {
   const ordered = [...snapshot.matches].sort(compareMatchesNewest)
   return (
     <div className="view-stack">
@@ -134,7 +172,14 @@ export function MatchesView({ snapshot, onNew, onEdit, onDelete }: { snapshot: R
         <button className="round-add" type="button" onClick={onNew} aria-label="Nova partida"><Plus /></button>
       </div>
       {!ordered.length ? (
-        <EmptyState title="Nenhuma partida ainda" text="Quando todos terminarem o jogo, registre os placares por aqui." action={<button className="primary-button" onClick={onNew}><Plus size={18} /> Nova partida</button>} />
+        <EmptyState
+          title={filtered ? 'Nenhuma partida nesse período' : 'Nenhuma partida ainda'}
+          text={filtered ? 'Nada foi registrado entre as datas escolhidas.' : 'Quando todos terminarem o jogo, registre os placares por aqui.'}
+          icon={filtered ? <CalendarRange size={28} /> : undefined}
+          action={filtered
+            ? <button className="primary-button" type="button" onClick={onClearPeriod}>Ver todas as partidas</button>
+            : <button className="primary-button" onClick={onNew}><Plus size={18} /> Nova partida</button>}
+        />
       ) : (
         <div className="match-list">
           {ordered.map((match, index) => <MatchCard key={match.id} match={match} snapshot={snapshot} index={index} onEdit={() => onEdit(match)} onDelete={() => onDelete(match)} />)}
@@ -260,7 +305,7 @@ export function PlayersView({ snapshot, onAdd, onEdit }: { snapshot: RoomSnapsho
   )
 }
 
-export function InsightsView({ snapshot }: { snapshot: RoomSnapshot }) {
+export function InsightsView({ snapshot, filtered, onClearPeriod }: { snapshot: RoomSnapshot; filtered: boolean; onClearPeriod: () => void }) {
   const ranking = buildRanking(snapshot.players, snapshot.matches, snapshot.scores)
   const allScores = snapshot.scores.map((item) => item.score)
   const best = allScores.length ? Math.max(...allScores) : 0
@@ -289,7 +334,12 @@ export function InsightsView({ snapshot }: { snapshot: RoomSnapshot }) {
     <div className="view-stack">
       <div className="page-title"><div><span className="section-kicker">RAIO-X DA DISPUTA</span><h1>Estatísticas</h1><p>Os números por trás das viagens</p></div><span className="page-title__icon"><BarChart3 /></span></div>
       {!snapshot.matches.length ? (
-        <EmptyState title="Os gráficos vêm logo depois" text="Registre a primeira partida para revelar evolução, recordes e conquistas." icon={<BarChart3 size={28} />} />
+        <EmptyState
+          title={filtered ? 'Nenhuma partida nesse período' : 'Os gráficos vêm logo depois'}
+          text={filtered ? 'Escolha outro intervalo para ver evolução, recordes e conquistas.' : 'Registre a primeira partida para revelar evolução, recordes e conquistas.'}
+          icon={filtered ? <CalendarRange size={28} /> : <BarChart3 size={28} />}
+          action={filtered ? <button className="primary-button" type="button" onClick={onClearPeriod}>Ver todas as partidas</button> : undefined}
+        />
       ) : (
         <>
           <div className="stat-grid">
@@ -313,7 +363,7 @@ export function InsightsView({ snapshot }: { snapshot: RoomSnapshot }) {
             <div className="section-heading"><div><span className="section-kicker">DESTAQUES</span><h2>Hall da fama</h2></div></div>
             <div className="achievement-grid">
               <article className="achievement achievement--gold"><span><Crown /></span><div><small>DONO DO TEMPO</small><strong>{champion?.nickname ?? '—'}</strong><p>Lidera o placar geral</p></div></article>
-              <article className="achievement achievement--mint"><span><Target /></span><div><small>RECORDE ETERNO</small><strong>{recordNames || 'Aguardando'}</strong><p>{recordHolders.length ? `${formatScore(best)} pts${recordMatch ? ` em ${recordMatch.title}` : ''}` : 'Registre um placar para abrir o recorde'}</p></div></article>
+              <article className="achievement achievement--mint"><span><Target /></span><div><small>{filtered ? 'RECORDE DO PERÍODO' : 'RECORDE ETERNO'}</small><strong>{recordNames || 'Aguardando'}</strong><p>{recordHolders.length ? `${formatScore(best)} pts${recordMatch ? ` em ${recordMatch.title}` : ''}` : 'Registre um placar para abrir o recorde'}</p></div></article>
               <article className="achievement achievement--coral"><span><Clock3 /></span><div><small>MESTRE DO TEMPO</small><strong>{timeMaster?.player.nickname ?? 'Aguardando'}</strong><p>{timeMaster ? `${formatAverage(timeMaster.yearError)} anos de erro médio` : 'Importe resultados detalhados'}</p></div></article>
               <article className="achievement achievement--blue"><span><Globe2 /></span><div><small>MESTRE DO MAPA</small><strong>{geoMaster?.player.nickname ?? 'Aguardando'}</strong><p>{geoMaster ? `${formatAverage(geoMaster.distanceKm)} km de distância média` : 'Importe resultados detalhados'}</p></div></article>
             </div>

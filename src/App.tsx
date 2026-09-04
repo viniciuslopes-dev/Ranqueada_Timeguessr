@@ -1,19 +1,34 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BarChart3, Download, Gamepad2, Home, LogOut, Plus, RefreshCw, Share2, Trophy, Users } from 'lucide-react'
 import { Onboarding } from './components/Onboarding'
-import { MatchEditSheet, MatchSheet, PlayerSheet, ShareSheet } from './components/Sheets'
-import { InsightsView, MatchesView, PlayersView, RankingView } from './components/Views'
+import { MatchEditSheet, MatchSheet, PeriodSheet, PlayerSheet, ShareSheet } from './components/Sheets'
+import { InsightsView, MatchesView, PeriodBar, PlayersView, RankingView } from './components/Views'
 import { Brand, Spinner } from './components/ui'
+import { filterSnapshotByPeriod, isWithinRange, resolvePeriod, type Period, type PeriodPreset } from './lib/period'
 import { repository } from './lib/neonRepository'
 import type { GameMatch, ImportResultInput, MatchInput, MatchUpdateInput, Player, RankingMetric, RoomSnapshot } from './types'
 
 const ACTIVE_ROOM_KEY = 'cronorank:active-room'
+const PERIOD_KEY = 'cronorank:period'
 type ViewName = 'ranking' | 'matches' | 'players' | 'insights'
-type ModalName = 'match' | 'match-edit' | 'player' | 'share' | null
+type ModalName = 'match' | 'match-edit' | 'period' | 'player' | 'share' | null
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
+
+// guardamos o preset, nunca o intervalo ja resolvido: "semana atual" precisa
+// virar junto com a semana em vez de congelar na que foi escolhida.
+function readStoredPeriod(): Period {
+  try {
+    const raw = localStorage.getItem(PERIOD_KEY)
+    if (!raw) return { preset: 'all' }
+    const saved = JSON.parse(raw) as Period
+    if (saved.preset === 'custom' && saved.from && saved.to) return saved
+    if (saved.preset === 'week' || saved.preset === 'month') return { preset: saved.preset }
+  } catch { /* preferencia corrompida volta para o padrao */ }
+  return { preset: 'all' }
 }
 
 function readableError(error: unknown): string {
@@ -41,11 +56,20 @@ export default function App() {
   const [toast, setToast] = useState('')
   const [online, setOnline] = useState(navigator.onLine)
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null)
+  const [period, setPeriod] = useState<Period>(readStoredPeriod)
 
   const showToast = useCallback((message: string) => {
     setToast(message)
     window.setTimeout(() => setToast(''), 2800)
   }, [])
+
+  const range = useMemo(() => resolvePeriod(period), [period])
+  const visible = useMemo(() => snapshot ? filterSnapshotByPeriod(snapshot, range) : null, [snapshot, range])
+
+  useEffect(() => {
+    if (period.preset === 'all') localStorage.removeItem(PERIOD_KEY)
+    else localStorage.setItem(PERIOD_KEY, JSON.stringify(period))
+  }, [period])
 
   const clearModal = useCallback(() => {
     setModal(null)
@@ -186,6 +210,8 @@ export default function App() {
     }
   }
 
+  const clearPeriod = useCallback(() => setPeriod({ preset: 'all' }), [])
+
   const openNewMatch = () => {
     if (!snapshot?.players.length) {
       setView('players')
@@ -195,8 +221,19 @@ export default function App() {
     openModal('match')
   }
 
-  const saveMatch = (input: MatchInput) => mutate(() => repository.addMatch(snapshot!.room.id, input), 'Partida salva. Ranking atualizado!')
-  const importResult = (input: ImportResultInput) => mutate(() => repository.importResult(snapshot!.room.id, input), 'Resultado importado com as 5 rodadas!')
+  // uma partida lancada fora do periodo filtrado some da tela; avisamos em vez
+  // de deixar parecer que o salvamento falhou
+  const savedMessage = (playedAt: string, success: string) =>
+    isWithinRange(playedAt, range) ? success : 'Salvo, mas fora do período filtrado.'
+
+  const saveMatch = (input: MatchInput) => mutate(
+    () => repository.addMatch(snapshot!.room.id, input),
+    savedMessage(input.playedAt, 'Partida salva. Ranking atualizado!'),
+  )
+  const importResult = (input: ImportResultInput) => mutate(
+    () => repository.importResult(snapshot!.room.id, input),
+    savedMessage(input.playedAt, 'Resultado importado com as 5 rodadas!'),
+  )
   const savePlayer = (nickname: string, color: string) => mutate(
     () => editingPlayer ? repository.updatePlayer(editingPlayer, nickname, color) : repository.addPlayer(snapshot!.room.id, nickname, color),
     editingPlayer ? 'Jogador atualizado!' : `${nickname} entrou na disputa!`,
@@ -207,7 +244,7 @@ export default function App() {
   }
   const updateMatch = async (input: MatchUpdateInput) => {
     if (!editingMatch) return
-    await mutate(() => repository.updateMatch(editingMatch, input), 'Partida atualizada!')
+    await mutate(() => repository.updateMatch(editingMatch, input), savedMessage(input.playedAt, 'Partida atualizada!'))
   }
   const deleteMatch = async (match: GameMatch) => {
     if (!window.confirm(`Apagar “${match.title}” e todos os placares?`)) return
@@ -263,11 +300,19 @@ export default function App() {
         <div className="demo-banner"><span>Prévia local</span><p>Os dados deste modo ficam somente neste aparelho.</p><button type="button" onClick={leaveRoom}>Conectar banco</button></div>
       )}
 
+      <PeriodBar
+        period={period}
+        range={range}
+        matchCount={visible!.matches.length}
+        onPreset={(preset: PeriodPreset) => preset === 'custom' ? openModal('period') : setPeriod({ preset })}
+        onCustom={() => openModal('period')}
+      />
+
       <main className="app-content">
-        {view === 'ranking' && <RankingView snapshot={snapshot} metric={metric} onMetric={setMetric} onNewMatch={openNewMatch} />}
-        {view === 'matches' && <MatchesView snapshot={snapshot} onNew={openNewMatch} onEdit={(match) => { setEditingMatch(match); openModal('match-edit') }} onDelete={deleteMatch} />}
-        {view === 'players' && <PlayersView snapshot={snapshot} onAdd={() => { setEditingPlayer(undefined); openModal('player') }} onEdit={(player) => { setEditingPlayer(player); openModal('player') }} />}
-        {view === 'insights' && <InsightsView snapshot={snapshot} />}
+        {view === 'ranking' && <RankingView snapshot={visible!} metric={metric} onMetric={setMetric} onNewMatch={openNewMatch} filtered={!!range} onClearPeriod={clearPeriod} />}
+        {view === 'matches' && <MatchesView snapshot={visible!} onNew={openNewMatch} onEdit={(match) => { setEditingMatch(match); openModal('match-edit') }} onDelete={deleteMatch} filtered={!!range} onClearPeriod={clearPeriod} />}
+        {view === 'players' && <PlayersView snapshot={visible!} onAdd={() => { setEditingPlayer(undefined); openModal('player') }} onEdit={(player) => { setEditingPlayer(player); openModal('player') }} />}
+        {view === 'insights' && <InsightsView snapshot={visible!} filtered={!!range} onClearPeriod={clearPeriod} />}
       </main>
 
       {(view === 'ranking' || view === 'matches') && snapshot.players.length > 0 && (
@@ -285,6 +330,7 @@ export default function App() {
       {modal === 'match-edit' && editingMatch && <MatchEditSheet match={editingMatch} busy={busy} onClose={closeModal} onSave={updateMatch} />}
       {modal === 'player' && <PlayerSheet player={editingPlayer} busy={busy} onClose={closeModal} onSave={savePlayer} onDelete={editingPlayer ? deletePlayer : undefined} />}
       {modal === 'share' && <ShareSheet room={snapshot.room} onClose={closeModal} onToast={showToast} />}
+      {modal === 'period' && <PeriodSheet period={period} onClose={closeModal} onSave={(chosen) => { setPeriod(chosen); closeModal() }} />}
       {toast && <div className="toast" role="status"><RefreshCw size={16} /> {toast}</div>}
     </div>
   )

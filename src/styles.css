@@ -89,6 +89,15 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .topbar__room small.offline i { background: var(--yellow); }
 .topbar__action { width: 37px; height: 37px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.13); border-radius: 12px; color: #dce3f1; background: rgba(255,255,255,.06); cursor: pointer; }
 .install-action { color: var(--yellow); }
+.period-bar { position: sticky; z-index: 25; top: calc(68px + env(safe-area-inset-top)); padding: 9px max(16px, calc((100vw - 920px) / 2)) 10px; display: grid; gap: 7px; border-bottom: 1px solid #e9e5dd; background: rgba(251, 250, 247, .94); backdrop-filter: blur(8px); }
+.period-filter { width: 100%; }
+.period-filter button { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 10px; }
+.period-summary { min-height: 26px; display: flex; align-items: center; gap: 8px; }
+.period-summary strong { color: var(--navy); font-size: 10px; font-weight: 800; }
+.period-summary span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 9px; }
+.period-summary button { width: 24px; height: 24px; flex: 0 0 auto; display: grid; place-items: center; border: 0; border-radius: 8px; color: #8b93a3; background: #eeebe4; cursor: pointer; }
+.period-summary button:hover { color: #c34238; background: #fff0ee; }
+.field-grid--even { grid-template-columns: 1fr 1fr; }
 .demo-banner { max-width: 920px; margin: 14px auto -5px; padding: 10px 18px; display: flex; align-items: center; gap: 10px; color: #735708; background: #fff2c8; border-radius: 12px; font-size: 11px; }
 .demo-banner span { font-weight: 900; text-transform: uppercase; }
 .demo-banner p { flex: 1; }

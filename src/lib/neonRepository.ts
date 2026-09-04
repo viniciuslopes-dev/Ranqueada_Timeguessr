@@ -1,15 +1,12 @@
 import type { GameMatch, ImportResultInput, MatchInput, MatchUpdateInput, Player, RoomSnapshot } from '../types'
 import { isNeonApiEnabled, neonApi } from './api'
+import { localDaysAgo, localToday } from './period'
 
 const DEMO_STORAGE_KEY = 'cronorank:demo-data:v1'
 const DEMO_ROOM_ID = 'demo-room'
 const TOKEN_PREFIX = 'cronorank:room-token:'
-const today = () => new Date().toISOString().slice(0, 10)
-const daysAgo = (days: number) => {
-  const date = new Date()
-  date.setDate(date.getDate() - days)
-  return date.toISOString().slice(0, 10)
-}
+const today = localToday
+const daysAgo = localDaysAgo
 const uid = () => crypto.randomUUID()
 const tokenKey = (roomId: string) => `${TOKEN_PREFIX}${roomId}`
 

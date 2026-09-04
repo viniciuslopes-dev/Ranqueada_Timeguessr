@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { CalendarDays, Check, CheckCircle2, Clock3, Copy, Globe2, Keyboard, ClipboardPaste, Share2, Trophy, Trash2 } from 'lucide-react'
 import type { GameMatch, ImportResultInput, MatchInput, MatchUpdateInput, Player, Room } from '../types'
+import { localToday, resolvePeriod, type Period } from '../lib/period'
 import { parseTimeGuessrShare } from '../lib/timeguessrParser'
 import { PLAYER_COLORS, PlayerAvatar, Sheet } from './ui'
 
@@ -16,13 +17,13 @@ type MatchSheetProps = {
 export function MatchSheet({ players, matchNumber, busy, onClose, onSave, onImport }: MatchSheetProps) {
   const [mode, setMode] = useState<'paste' | 'manual'>('paste')
   const [title, setTitle] = useState(`Daily #${matchNumber}`)
-  const [playedAt, setPlayedAt] = useState(new Date().toISOString().slice(0, 10))
+  const [playedAt, setPlayedAt] = useState(localToday())
   const [active, setActive] = useState<Record<string, boolean>>(() => Object.fromEntries(players.map((player) => [player.id, true])))
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(players.map((player) => [player.id, ''])))
   const [error, setError] = useState('')
   const [shareText, setShareText] = useState('')
   const [selectedPlayerId, setSelectedPlayerId] = useState(players[0]?.id ?? '')
-  const [importDate, setImportDate] = useState(new Date().toISOString().slice(0, 10))
+  const [importDate, setImportDate] = useState(localToday())
   const [readingClipboard, setReadingClipboard] = useState(false)
   const [clipboardError, setClipboardError] = useState('')
 
@@ -241,6 +242,50 @@ export function MatchEditSheet({ match, busy, onClose, onSave }: MatchEditSheetP
         <button className="primary-button primary-button--large" type="submit" disabled={busy}>
           {busy ? 'Salvando…' : 'Salvar alterações'}
         </button>
+      </form>
+    </Sheet>
+  )
+}
+
+type PeriodSheetProps = {
+  period: Period
+  onClose: () => void
+  onSave: (period: Period) => void
+}
+
+export function PeriodSheet({ period, onClose, onSave }: PeriodSheetProps) {
+  const current = resolvePeriod(period) ?? { from: localToday(), to: localToday() }
+  const [from, setFrom] = useState(current.from)
+  const [to, setTo] = useState(current.to)
+  const [error, setError] = useState('')
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    if (!from || !to) return setError('Preencha as duas datas.')
+    setError('')
+    // resolvePeriod endireita o intervalo se as datas vierem trocadas
+    onSave({ preset: 'custom', from, to })
+  }
+
+  return (
+    <Sheet title="Escolher período" subtitle="Veja o ranking apenas entre duas datas" onClose={onClose}>
+      <form className="sheet-form" onSubmit={submit}>
+        <div className="field-grid field-grid--even">
+          <label className="field field--date">
+            <span>De</span>
+            <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} required />
+          </label>
+          <label className="field field--date">
+            <span>Até</span>
+            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} required />
+          </label>
+        </div>
+        <p className="edit-match-note">
+          <CalendarDays size={15} />
+          O filtro usa a data em que a partida aconteceu. Se alguma estiver errada, corrija pelo lápis na aba Partidas.
+        </p>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <button className="primary-button primary-button--large" type="submit">Aplicar período</button>
       </form>
     </Sheet>
   )
