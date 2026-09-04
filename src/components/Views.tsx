@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays, CalendarRange, ChevronDown, ChevronRight, Clock3, Crown, Edit3, Gauge, Globe2, MoveHorizontal, Plus, Sparkles, Swords, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users, X } from 'lucide-react'
 import type { GameMatch, Player, PlayerRanking, RankingMetric, RoomSnapshot, Score } from '../types'
 import { buildConsistency, buildHeadToHead, buildRanking, buildRoundAverages, compareMatchesNewest, compareMatchesOldest, formatScore, formatShortDate, getMatchPositions, getWinnerIds } from '../lib/ranking'
@@ -558,6 +558,31 @@ function EvolutionChart({ snapshot }: { snapshot: RoomSnapshot }) {
     ? [0, 10000, 20000, 30000, 40000, 50000].map((value) => ({ key: value, ratio: scoreRatio(value), label: `${value / 1000}k` }))
     : Array.from({ length: lastPlace }, (_, index) => ({ key: index, ratio: placeRatio(index + 1), label: `${index + 1}º` }))
 
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [axisShift, setAxisShift] = useState(0)
+
+  // o eixo Y vive dentro do SVG que rola, entao empurramos ele de volta pela
+  // mesma distancia rolada para que continue visivel ao arrastar o grafico
+  useEffect(() => {
+    const node = wrapRef.current
+    if (!node) return
+    let frame = 0
+    const measure = () => {
+      frame = 0
+      const rendered = node.querySelector('svg')?.getBoundingClientRect().width ?? 0
+      setAxisShift(rendered ? (node.scrollLeft * width) / rendered : 0)
+    }
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(measure) }
+    measure()
+    node.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    return () => {
+      if (frame) cancelAnimationFrame(frame)
+      node.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+    }
+  }, [mode, matches.length])
+
   const series = players.map((player) => ({
     player,
     points: matches
@@ -580,13 +605,10 @@ function EvolutionChart({ snapshot }: { snapshot: RoomSnapshot }) {
       </div>
       <div className="chart-scroll-area">
         <p className="chart-swipe-hint"><MoveHorizontal size={15} /> Deslize o gráfico para os lados</p>
-        <div className="chart-wrap" tabIndex={0} role="region" aria-label="Gráfico com rolagem horizontal">
+        <div className="chart-wrap" ref={wrapRef} tabIndex={0} role="region" aria-label="Gráfico com rolagem horizontal">
           <div className="chart-stage">
             <svg className="line-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={mode === 'score' ? 'Evolução de pontuação dos melhores jogadores' : 'Colocação dos melhores jogadores em cada partida'}>
-              {ticks.map((tick) => {
-                const y = rowY(tick.ratio)
-                return <g key={tick.key}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} /><text x={padding.left - 8} y={y + 4}>{tick.label}</text></g>
-              })}
+              {ticks.map((tick) => <line key={tick.key} x1={padding.left} x2={width - padding.right} y1={rowY(tick.ratio)} y2={rowY(tick.ratio)} />)}
               {series.map((item) => (
                 <g key={item.player.id} className="chart-series">
                   <polyline points={item.points.map((point) => `${point.x},${point.y}`).join(' ')} style={{ stroke: item.player.color }} />
@@ -594,6 +616,10 @@ function EvolutionChart({ snapshot }: { snapshot: RoomSnapshot }) {
                 </g>
               ))}
               {matches.map((match, index) => <text className="x-label" key={match.id} x={columnX(index)} y={height - 8}>{typeof match.game_number === 'number' ? `#${match.game_number}` : formatShortDate(match.played_at)}</text>)}
+              <g className="chart-axis" transform={`translate(${axisShift} 0)`}>
+                <rect x={-14} y={-6} width={padding.left + 10} height={height + 12} />
+                {ticks.map((tick) => <text key={tick.key} x={padding.left - 8} y={rowY(tick.ratio) + 4}>{tick.label}</text>)}
+              </g>
             </svg>
             <div className="chart-legend">{players.map((player) => <span key={player.id}><i style={{ background: player.color }} />{player.nickname}</span>)}</div>
           </div>

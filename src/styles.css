@@ -247,6 +247,7 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .line-chart line { stroke: #e9e7e2; stroke-width: 1; stroke-dasharray: 4 5; }
 .line-chart text { fill: #929aaa; font-size: 9px; text-anchor: end; font-family: 'DM Sans'; }
 .line-chart .x-label { text-anchor: middle; font-size: 8px; }
+.line-chart .chart-axis rect { fill: #fff; }
 .chart-series polyline { fill: none; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
 .chart-series circle { stroke: #fff; stroke-width: 2.5; }
 .chart-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px 16px; }
