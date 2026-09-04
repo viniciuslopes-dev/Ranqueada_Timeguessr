@@ -1,9 +1,31 @@
-import { BarChart3, CalendarDays, ChevronDown, ChevronRight, Clock3, Crown, Edit3, Globe2, MoveHorizontal, Plus, Sparkles, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays, ChevronDown, ChevronRight, Clock3, Crown, Edit3, Globe2, MoveHorizontal, Plus, Sparkles, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users } from 'lucide-react'
 import type { GameMatch, Player, PlayerRanking, RankingMetric, RoomSnapshot, Score } from '../types'
 import { buildRanking, compareMatchesNewest, compareMatchesOldest, formatScore, formatShortDate, getWinnerIds } from '../lib/ranking'
 import { EmptyState, PlayerAvatar } from './ui'
 
 const MEDALS = ['🥇', '🥈', '🥉']
+
+type Specialty = {
+  player: PlayerRanking
+  rounds: number
+  yearError: number | null
+  distanceKm: number | null
+  roundScore: number | null
+}
+
+type SpecialtyColumn = 'yearError' | 'distanceKm' | 'roundScore'
+
+// ano e mapa sao melhores quanto menores; pontos, quanto maior. bestFirst e a
+// direcao aplicada no primeiro clique de cada coluna.
+const SPECIALTY_COLUMNS: Array<{ key: SpecialtyColumn; label: string; bestFirst: 'asc' | 'desc' }> = [
+  { key: 'yearError', label: 'Ano', bestFirst: 'asc' },
+  { key: 'distanceKm', label: 'Mapa', bestFirst: 'asc' },
+  { key: 'roundScore', label: 'Pontos', bestFirst: 'desc' },
+]
+
+const formatAverage = (value: number | null) => value === null ? '—' : value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })
+const formatRoundAverage = (value: number | null) => value === null ? '—' : Math.round(value).toLocaleString('pt-BR')
 
 type RankingProps = {
   snapshot: RoomSnapshot
@@ -248,7 +270,7 @@ export function InsightsView({ snapshot }: { snapshot: RoomSnapshot }) {
   const recordNames = recordHolders.map((player) => player.nickname).join(' e ')
   const recordMatch = snapshot.matches.find((match) => match.id === recordScores[0]?.match_id)
   const champion = ranking[0]
-  const specialties = ranking.map((player) => {
+  const specialties: Specialty[] = ranking.map((player) => {
     const rounds = (snapshot.rounds ?? []).filter((round) => round.player_id === player.id)
     const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length
     return {
@@ -262,8 +284,6 @@ export function InsightsView({ snapshot }: { snapshot: RoomSnapshot }) {
   const measured = specialties.filter((item) => item.rounds > 0)
   const timeMaster = [...measured].sort((a, b) => a.yearError! - b.yearError!)[0]
   const geoMaster = [...measured].sort((a, b) => a.distanceKm! - b.distanceKm!)[0]
-  const formatAverage = (value: number | null) => value === null ? '—' : value.toLocaleString('pt-BR', { maximumFractionDigits: 1 })
-  const formatRoundAverage = (value: number | null) => value === null ? '—' : Math.round(value).toLocaleString('pt-BR')
 
   return (
     <div className="view-stack">
@@ -284,17 +304,7 @@ export function InsightsView({ snapshot }: { snapshot: RoomSnapshot }) {
           <section>
             <div className="section-heading"><div><span className="section-kicker">PRECISÃO POR JOGADOR</span><h2>Especialidades</h2></div></div>
             {measured.length ? (
-              <div className="specialty-card">
-                <div className="specialty-head"><span>Jogador</span><span>Ano</span><span>Mapa</span><span>Pontos</span></div>
-                {specialties.map((item) => (
-                  <div className="specialty-row" key={item.player.id}>
-                    <div><PlayerAvatar player={item.player} size="sm" /><strong>{item.player.nickname}</strong><small>{item.rounds ? `${item.rounds} rodadas` : 'sem detalhes'}</small></div>
-                    <span title="Erro médio em anos"><Clock3 size={14} /><strong>{formatAverage(item.yearError)}</strong><small>anos</small></span>
-                    <span title="Distância média"><Globe2 size={14} /><strong>{formatAverage(item.distanceKm)}</strong><small>km</small></span>
-                    <span title="Pontuação média por rodada"><Trophy size={14} /><strong>{formatRoundAverage(item.roundScore)}</strong><small>média</small></span>
-                  </div>
-                ))}
-              </div>
+              <SpecialtyTable specialties={specialties} />
             ) : (
               <div className="detail-empty"><span className="detail-empty__icon">📋</span><div><strong>Os placares antigos continuam valendo</strong><p>Cole um resultado compartilhado para liberar as métricas de ano e mapa.</p></div></div>
             )}
@@ -310,6 +320,54 @@ export function InsightsView({ snapshot }: { snapshot: RoomSnapshot }) {
           </section>
         </>
       )}
+    </div>
+  )
+}
+
+function SpecialtyTable({ specialties }: { specialties: Specialty[] }) {
+  const [sort, setSort] = useState<{ key: SpecialtyColumn; direction: 'asc' | 'desc' } | null>(null)
+
+  const rows = sort
+    ? [...specialties].sort((a, b) => {
+        const first = a[sort.key]
+        const second = b[sort.key]
+        // quem ainda nao tem rodadas detalhadas fica sempre no fim da lista
+        if (first === null || second === null) return first === second ? 0 : first === null ? 1 : -1
+        return sort.direction === 'asc' ? first - second : second - first
+      })
+    : specialties
+
+  return (
+    <div className="specialty-card">
+      <div className="specialty-head">
+        <span>Jogador</span>
+        {SPECIALTY_COLUMNS.map((column) => {
+          const active = sort?.key === column.key
+          const direction = active ? sort.direction : column.bestFirst
+          return (
+            <button
+              className={`specialty-sort ${active ? 'specialty-sort--active' : ''}`}
+              type="button"
+              key={column.key}
+              aria-label={`Ordenar por ${column.label}, ${direction === 'asc' ? 'do menor para o maior' : 'do maior para o menor'}`}
+              onClick={() => setSort((current) => current?.key === column.key
+                ? { key: column.key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+                : { key: column.key, direction: column.bestFirst })}
+            >
+              {column.label}
+              {active ? (direction === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <ArrowUpDown size={11} />}
+            </button>
+          )
+        })}
+      </div>
+      {rows.map((item) => (
+        <div className="specialty-row" key={item.player.id}>
+          <div><PlayerAvatar player={item.player} size="sm" /><strong>{item.player.nickname}</strong><small>{item.rounds ? `${item.rounds} rodadas` : 'sem detalhes'}</small></div>
+          <span title="Erro médio em anos"><Clock3 size={14} /><strong>{formatAverage(item.yearError)}</strong><small>anos</small></span>
+          <span title="Distância média"><Globe2 size={14} /><strong>{formatAverage(item.distanceKm)}</strong><small>km</small></span>
+          <span title="Pontuação média por rodada"><Trophy size={14} /><strong>{formatRoundAverage(item.roundScore)}</strong><small>média</small></span>
+        </div>
+      ))}
     </div>
   )
 }
