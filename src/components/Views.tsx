@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays, CalendarRange, ChevronDown, ChevronRight, Clock3, Crown, Edit3, Globe2, MoveHorizontal, Plus, Sparkles, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays, CalendarRange, ChevronDown, ChevronRight, Clock3, Crown, Edit3, Gauge, Globe2, MoveHorizontal, Plus, Sparkles, Swords, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users, X } from 'lucide-react'
 import type { GameMatch, Player, PlayerRanking, RankingMetric, RoomSnapshot, Score } from '../types'
-import { buildRanking, compareMatchesNewest, compareMatchesOldest, formatScore, formatShortDate, getWinnerIds } from '../lib/ranking'
+import { buildConsistency, buildHeadToHead, buildRanking, buildRoundAverages, compareMatchesNewest, compareMatchesOldest, formatScore, formatShortDate, getMatchPositions, getWinnerIds } from '../lib/ranking'
 import { formatPeriodLabel, type DateRange, type Period, type PeriodPreset } from '../lib/period'
 import { EmptyState, PlayerAvatar } from './ui'
 
@@ -315,6 +315,7 @@ export function InsightsView({ snapshot, filtered, onClearPeriod }: { snapshot: 
   const recordNames = recordHolders.map((player) => player.nickname).join(' e ')
   const recordMatch = snapshot.matches.find((match) => match.id === recordScores[0]?.match_id)
   const champion = ranking[0]
+  const steadiest = buildConsistency(snapshot.players, snapshot.scores)[0]
   const specialties: Specialty[] = ranking.map((player) => {
     const rounds = (snapshot.rounds ?? []).filter((round) => round.player_id === player.id)
     const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length
@@ -351,6 +352,7 @@ export function InsightsView({ snapshot, filtered, onClearPeriod }: { snapshot: 
             <div className="section-heading"><div><span className="section-kicker">PLACAR POR PARTIDA</span><h2>Corrida no tempo</h2></div></div>
             <EvolutionChart snapshot={snapshot} />
           </section>
+          <ConsistencyCard snapshot={snapshot} />
           <section>
             <div className="section-heading"><div><span className="section-kicker">PRECISÃO POR JOGADOR</span><h2>Especialidades</h2></div></div>
             {measured.length ? (
@@ -359,18 +361,131 @@ export function InsightsView({ snapshot, filtered, onClearPeriod }: { snapshot: 
               <div className="detail-empty"><span className="detail-empty__icon">📋</span><div><strong>Os placares antigos continuam valendo</strong><p>Cole um resultado compartilhado para liberar as métricas de ano e mapa.</p></div></div>
             )}
           </section>
+          <PlayerProfile snapshot={snapshot} />
           <section>
             <div className="section-heading"><div><span className="section-kicker">DESTAQUES</span><h2>Hall da fama</h2></div></div>
             <div className="achievement-grid">
               <article className="achievement achievement--gold"><span><Crown /></span><div><small>DONO DO TEMPO</small><strong>{champion?.nickname ?? '—'}</strong><p>Lidera o placar geral</p></div></article>
               <article className="achievement achievement--mint"><span><Target /></span><div><small>{filtered ? 'RECORDE DO PERÍODO' : 'RECORDE ETERNO'}</small><strong>{recordNames || 'Aguardando'}</strong><p>{recordHolders.length ? `${formatScore(best)} pts${recordMatch ? ` em ${recordMatch.title}` : ''}` : 'Registre um placar para abrir o recorde'}</p></div></article>
               <article className="achievement achievement--coral"><span><Clock3 /></span><div><small>MESTRE DO TEMPO</small><strong>{timeMaster?.player.nickname ?? 'Aguardando'}</strong><p>{timeMaster ? `${formatAverage(timeMaster.yearError)} anos de erro médio` : 'Importe resultados detalhados'}</p></div></article>
+              <article className="achievement achievement--violet"><span><Gauge /></span><div><small>RELÓGIO SUÍÇO</small><strong>{steadiest?.player.nickname ?? 'Aguardando'}</strong><p>{steadiest ? `Oscila só ±${formatScore(steadiest.deviation)} pts` : 'Precisa de duas partidas'}</p></div></article>
               <article className="achievement achievement--blue"><span><Globe2 /></span><div><small>MESTRE DO MAPA</small><strong>{geoMaster?.player.nickname ?? 'Aguardando'}</strong><p>{geoMaster ? `${formatAverage(geoMaster.distanceKm)} km de distância média` : 'Importe resultados detalhados'}</p></div></article>
             </div>
           </section>
         </>
       )}
     </div>
+  )
+}
+
+function ConsistencyCard({ snapshot }: { snapshot: RoomSnapshot }) {
+  const consistency = buildConsistency(snapshot.players, snapshot.scores)
+  if (!consistency.length) return null
+
+  return (
+    <section>
+      <div className="section-heading"><div><span className="section-kicker">OSCILAÇÃO DOS PLACARES</span><h2>Regularidade</h2></div></div>
+      <div className="consistency-card">
+        {consistency.map((item) => (
+          <article key={item.player.id}>
+            <div className="consistency-identity">
+              <PlayerAvatar player={item.player} size="sm" />
+              <strong>{item.player.nickname}</strong>
+              <span>±{formatScore(item.deviation)}</span>
+            </div>
+            <div className="consistency-range" role="img" aria-label={`De ${formatScore(item.worst)} a ${formatScore(item.best)} pontos, média de ${formatScore(item.average)}`}>
+              <i style={{ left: `${(item.worst / 50000) * 100}%`, right: `${100 - (item.best / 50000) * 100}%`, background: item.player.color }} />
+              <b style={{ left: `${(item.average / 50000) * 100}%` }} />
+            </div>
+            <div className="consistency-scale"><small>{formatScore(item.worst)}</small><small>{formatScore(item.best)}</small></div>
+          </article>
+        ))}
+      </div>
+      <p className="section-note">A barra vai do pior ao melhor placar e o traço marca a média. Quanto menor o ±, mais previsível é o jogador.</p>
+    </section>
+  )
+}
+
+function PlayerProfile({ snapshot }: { snapshot: RoomSnapshot }) {
+  const ranking = buildRanking(snapshot.players, snapshot.matches, snapshot.scores)
+  const [selectedId, setSelectedId] = useState('')
+  const selected = ranking.find((player) => player.id === selectedId) ?? ranking[0]
+  if (!selected) return null
+
+  const rounds = snapshot.rounds ?? []
+  const averages = buildRoundAverages(rounds, selected.id)
+  const league = buildRoundAverages(rounds)
+  const duels = buildHeadToHead(selected.id, snapshot.players, snapshot.scores)
+  const measured = averages.some((item) => item.rounds > 0)
+
+  return (
+    <section>
+      <div className="section-heading"><div><span className="section-kicker">PERFIL DO JOGADOR</span><h2>Como {selected.nickname} joga</h2></div></div>
+
+      <div className="profile-picker" role="radiogroup" aria-label="Jogador do perfil">
+        {ranking.map((player) => (
+          <button
+            className={player.id === selected.id ? 'active' : ''}
+            type="button"
+            role="radio"
+            aria-checked={player.id === selected.id}
+            key={player.id}
+            onClick={() => setSelectedId(player.id)}
+          >
+            <PlayerAvatar player={player} size="sm" />
+            <span>{player.nickname}</span>
+          </button>
+        ))}
+      </div>
+
+      <article className="profile-block">
+        <header><Trophy size={15} /><div><strong>Desempenho por rodada</strong><span>Média de pontos em cada uma das cinco</span></div></header>
+        {measured ? (
+          <>
+            <div className="round-chart">
+              {averages.map((item, index) => (
+                <div className="round-chart__column" key={item.roundNumber}>
+                  <div className="round-chart__track">
+                    <div className="round-chart__bar" style={{ height: `${(item.average / 10000) * 100}%`, background: selected.color }} />
+                    {league[index].average > 0 && <i className="round-chart__league" style={{ bottom: `${(league[index].average / 10000) * 100}%` }} />}
+                  </div>
+                  <strong>{item.rounds ? formatScore(item.average) : '—'}</strong>
+                  <small>{item.roundNumber}ª</small>
+                </div>
+              ))}
+            </div>
+            <p className="round-chart__legend"><i /> média da liga na mesma rodada</p>
+          </>
+        ) : (
+          <p className="profile-empty">Cole um resultado compartilhado para liberar a leitura por rodada.</p>
+        )}
+      </article>
+
+      <article className="profile-block">
+        <header><Swords size={15} /><div><strong>Confronto direto</strong><span>Só contam as partidas em que os dois jogaram</span></div></header>
+        {duels.length ? (
+          <div className="duel-list">
+            {duels.map((duel) => (
+              <div key={duel.opponent.id}>
+                <PlayerAvatar player={duel.opponent} size="sm" />
+                <div className="duel-identity">
+                  <strong>{duel.opponent.nickname}</strong>
+                  <small>{duel.games} confronto{duel.games === 1 ? '' : 's'}{duel.draws ? ` · ${duel.draws} empate${duel.draws === 1 ? '' : 's'}` : ''}</small>
+                </div>
+                <div className="duel-bar" aria-hidden="true">
+                  <i style={{ width: `${(duel.wins / duel.games) * 100}%`, background: selected.color }} />
+                  <i style={{ width: `${(duel.draws / duel.games) * 100}%`, background: '#d8d9dd' }} />
+                  <i style={{ width: `${(duel.losses / duel.games) * 100}%`, background: duel.opponent.color }} />
+                </div>
+                <span className="duel-score" aria-label={`${duel.wins} vitórias contra ${duel.losses}`}>{duel.wins}<small>–</small>{duel.losses}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="profile-empty">Ainda não houve partida com outro jogador para comparar.</p>
+        )}
+      </article>
+    </section>
   )
 }
 
@@ -423,47 +538,67 @@ function SpecialtyTable({ specialties }: { specialties: Specialty[] }) {
 }
 
 function EvolutionChart({ snapshot }: { snapshot: RoomSnapshot }) {
+  const [mode, setMode] = useState<'score' | 'position'>('score')
   const matches = [...snapshot.matches].sort(compareMatchesOldest).slice(-8)
   const players = buildRanking(snapshot.players, snapshot.matches, snapshot.scores).slice(0, 4)
+  const positions = matches.map((match) => getMatchPositions(match.id, snapshot.scores))
+  const lastPlace = Math.max(2, ...positions.map((item) => item.size))
   const width = 680
   const height = 260
   const padding = { top: 20, right: 16, bottom: 34, left: 45 }
   const plotWidth = width - padding.left - padding.right
   const plotHeight = height - padding.top - padding.bottom
-  const point = (index: number, score: number) => ({
-    x: padding.left + (matches.length === 1 ? plotWidth / 2 : (index / (matches.length - 1)) * plotWidth),
-    y: padding.top + plotHeight - (score / 50000) * plotHeight,
-  })
+  const columnX = (index: number) => padding.left + (matches.length === 1 ? plotWidth / 2 : (index / (matches.length - 1)) * plotWidth)
+  // ratio 1 e o topo do grafico, 0 a base
+  const rowY = (ratio: number) => padding.top + plotHeight - ratio * plotHeight
+  const scoreRatio = (score: number) => score / 50000
+  const placeRatio = (place: number) => 1 - (place - 1) / (lastPlace - 1)
+
+  const ticks = mode === 'score'
+    ? [0, 10000, 20000, 30000, 40000, 50000].map((value) => ({ key: value, ratio: scoreRatio(value), label: `${value / 1000}k` }))
+    : Array.from({ length: lastPlace }, (_, index) => ({ key: index, ratio: placeRatio(index + 1), label: `${index + 1}º` }))
+
+  const series = players.map((player) => ({
+    player,
+    points: matches
+      .map((match, index) => {
+        if (mode === 'position') {
+          const place = positions[index].get(player.id)
+          return place === undefined ? null : { x: columnX(index), y: rowY(placeRatio(place)) }
+        }
+        const score = snapshot.scores.find((item) => item.match_id === match.id && item.player_id === player.id)
+        return score ? { x: columnX(index), y: rowY(scoreRatio(score.score)) } : null
+      })
+      .filter((item): item is { x: number; y: number } => item !== null),
+  }))
 
   return (
-    <div className="chart-scroll-area">
-      <p className="chart-swipe-hint"><MoveHorizontal size={15} /> Deslize o gráfico para os lados</p>
-      <div className="chart-wrap" tabIndex={0} role="region" aria-label="Gráfico com rolagem horizontal">
-        <div className="chart-stage">
-          <svg className="line-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Evolução de pontuação dos melhores jogadores">
-        {[0, 10000, 20000, 30000, 40000, 50000].map((tick) => {
-          const y = point(0, tick).y
-          return <g key={tick}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} /><text x={padding.left - 8} y={y + 4}>{tick / 1000}k</text></g>
-        })}
-        {players.map((player) => {
-          const points = matches
-            .map((match, index) => {
-              const score = snapshot.scores.find((item) => item.match_id === match.id && item.player_id === player.id)
-              return score ? point(index, score.score) : null
-            })
-            .filter((item): item is { x: number; y: number } => item !== null)
-          return (
-            <g key={player.id} className="chart-series">
-              <polyline points={points.map((item) => `${item.x},${item.y}`).join(' ')} style={{ stroke: player.color }} />
-              {points.map((item, index) => <circle key={index} cx={item.x} cy={item.y} r="5" style={{ fill: player.color }} />)}
-            </g>
-          )
-        })}
-        {matches.map((match, index) => <text className="x-label" key={match.id} x={point(index, 0).x} y={height - 8}>{typeof match.game_number === 'number' ? `#${match.game_number}` : formatShortDate(match.played_at)}</text>)}
-          </svg>
-          <div className="chart-legend">{players.map((player) => <span key={player.id}><i style={{ background: player.color }} />{player.nickname}</span>)}</div>
+    <>
+      <div className="segmented chart-mode" role="tablist" aria-label="Leitura do gráfico">
+        <button type="button" className={mode === 'score' ? 'active' : ''} onClick={() => setMode('score')}>Pontos</button>
+        <button type="button" className={mode === 'position' ? 'active' : ''} onClick={() => setMode('position')}>Colocação</button>
+      </div>
+      <div className="chart-scroll-area">
+        <p className="chart-swipe-hint"><MoveHorizontal size={15} /> Deslize o gráfico para os lados</p>
+        <div className="chart-wrap" tabIndex={0} role="region" aria-label="Gráfico com rolagem horizontal">
+          <div className="chart-stage">
+            <svg className="line-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={mode === 'score' ? 'Evolução de pontuação dos melhores jogadores' : 'Colocação dos melhores jogadores em cada partida'}>
+              {ticks.map((tick) => {
+                const y = rowY(tick.ratio)
+                return <g key={tick.key}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} /><text x={padding.left - 8} y={y + 4}>{tick.label}</text></g>
+              })}
+              {series.map((item) => (
+                <g key={item.player.id} className="chart-series">
+                  <polyline points={item.points.map((point) => `${point.x},${point.y}`).join(' ')} style={{ stroke: item.player.color }} />
+                  {item.points.map((point, index) => <circle key={index} cx={point.x} cy={point.y} r="5" style={{ fill: item.player.color }} />)}
+                </g>
+              ))}
+              {matches.map((match, index) => <text className="x-label" key={match.id} x={columnX(index)} y={height - 8}>{typeof match.game_number === 'number' ? `#${match.game_number}` : formatShortDate(match.played_at)}</text>)}
+            </svg>
+            <div className="chart-legend">{players.map((player) => <span key={player.id}><i style={{ background: player.color }} />{player.nickname}</span>)}</div>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   )
 }

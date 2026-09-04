@@ -252,6 +252,52 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .chart-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px 16px; }
 .chart-legend span { display: inline-flex; align-items: center; gap: 5px; color: #687389; font-size: 9px; font-weight: 700; }
 .chart-legend i { width: 8px; height: 8px; border-radius: 50%; }
+.section-note { margin-top: 9px; color: var(--muted); font-size: 9px; line-height: 1.55; }
+.chart-mode { width: 100%; margin-bottom: 12px; }
+
+.consistency-card { display: grid; gap: 11px; padding: 14px; border: 1px solid #e6e3dc; border-radius: 19px; background: #fff; }
+.consistency-card article { display: grid; gap: 6px; }
+.consistency-identity { display: flex; align-items: center; gap: 8px; }
+.consistency-identity strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.consistency-identity span { flex: 0 0 auto; padding: 2px 7px; border-radius: 7px; color: #43506b; background: #eef1f6; font-family: 'Space Grotesk', sans-serif; font-size: 10px; }
+.consistency-range { position: relative; height: 9px; border-radius: 99px; background: #f0eee8; }
+.consistency-range i { position: absolute; top: 0; bottom: 0; border-radius: 99px; opacity: .55; }
+.consistency-range b { position: absolute; top: -3px; width: 3px; height: 15px; margin-left: -1px; border-radius: 2px; background: var(--navy); }
+.consistency-scale { display: flex; justify-content: space-between; }
+.consistency-scale small { color: var(--muted); font-size: 8px; }
+
+.profile-picker { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 3px; margin-bottom: 11px; scrollbar-width: none; }
+.profile-picker::-webkit-scrollbar { display: none; }
+.profile-picker button { flex: 0 0 auto; min-height: 40px; padding: 5px 12px 5px 6px; display: flex; align-items: center; gap: 7px; border: 1px solid #dfddd7; border-radius: 99px; color: var(--navy); background: #fff; font-size: 10px; font-weight: 800; cursor: pointer; }
+.profile-picker button.active { border-color: var(--navy); background: var(--navy); color: #fff; }
+
+.profile-block { margin-bottom: 10px; padding: 14px; border: 1px solid #e6e3dc; border-radius: 19px; background: #fff; }
+.profile-block > header { display: flex; align-items: center; gap: 9px; margin-bottom: 13px; }
+.profile-block > header svg { flex: 0 0 auto; color: var(--coral-dark); }
+.profile-block > header strong { display: block; font-size: 12px; }
+.profile-block > header span { color: var(--muted); font-size: 9px; }
+.profile-empty { color: var(--muted); font-size: 10px; line-height: 1.5; }
+
+.round-chart { height: 128px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 9px; }
+.round-chart__column { display: grid; grid-template-rows: 1fr auto auto; gap: 3px; justify-items: center; }
+.round-chart__track { position: relative; width: 100%; border-radius: 9px 9px 4px 4px; background: #f4f2ec; }
+.round-chart__bar { position: absolute; left: 0; right: 0; bottom: 0; min-height: 3px; border-radius: 9px 9px 4px 4px; transition: height .25s ease; }
+.round-chart__league { position: absolute; left: -2px; right: -2px; height: 2px; border-radius: 2px; background: var(--navy); opacity: .4; }
+.round-chart__column strong { font-family: 'Space Grotesk', sans-serif; font-size: 10px; }
+.round-chart__column small { color: var(--muted); font-size: 8px; }
+.round-chart__legend { display: flex; align-items: center; gap: 6px; margin-top: 9px; color: var(--muted); font-size: 8px; }
+.round-chart__legend i { width: 15px; height: 2px; border-radius: 2px; background: var(--navy); opacity: .4; }
+
+.duel-list { display: grid; gap: 11px; }
+.duel-list > div { display: grid; grid-template-columns: auto minmax(64px, 1fr) minmax(56px, 1.1fr) auto; align-items: center; gap: 9px; }
+.duel-identity { min-width: 0; }
+.duel-identity strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.duel-identity small { color: var(--muted); font-size: 8px; }
+.duel-bar { height: 8px; display: flex; overflow: hidden; border-radius: 99px; background: #f0eee8; }
+.duel-bar i { min-width: 0; }
+.duel-score { font-family: 'Space Grotesk', sans-serif; color: var(--navy); font-size: 13px; font-weight: 700; }
+.duel-score small { margin: 0 2px; color: var(--muted); }
+
 .achievement-grid { display: grid; gap: 9px; }
 .achievement { min-height: 75px; padding: 12px 15px; display: flex; align-items: center; gap: 13px; border: 1px solid #e6e3dc; border-radius: 17px; background: #fff; }
 .achievement > span { width: 43px; height: 43px; display: grid; place-items: center; border-radius: 13px; }
@@ -259,6 +305,7 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .achievement--coral > span { color: #cc4f2c; background: #ffe6de; }
 .achievement--blue > span { color: #406bdf; background: #e9efff; }
 .achievement--mint > span { color: #1c7a5e; background: #dcf3ea; }
+.achievement--violet > span { color: #6844c9; background: #eee8ff; }
 .achievement > div { display: grid; }
 .achievement small { color: var(--muted); font-size: 8px; font-weight: 800; letter-spacing: .09em; }
 .achievement strong { margin: 1px 0; font-family: 'Space Grotesk', sans-serif; font-size: 14px; }

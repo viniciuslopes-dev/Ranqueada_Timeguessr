@@ -1,4 +1,4 @@
-import type { GameMatch, Player, PlayerRanking, RankingMetric, Score } from '../types'
+import type { GameMatch, Player, PlayerRanking, RankingMetric, RoundDetail, Score } from '../types'
 
 // Partidas importadas trazem o numero oficial do TimeGuessr: ele define a cronologia
 // competitiva mesmo quando um resultado antigo e lancado depois. Sem numero (placar
@@ -62,6 +62,96 @@ export function buildRanking(
     const primary = metric === 'total' ? b.total - a.total : metric === 'average' ? b.average - a.average : b.wins - a.wins
     return primary || b.wins - a.wins || b.average - a.average || a.nickname.localeCompare(b.nickname)
   })
+}
+
+export type PlayerConsistency = {
+  player: Player
+  games: number
+  average: number
+  best: number
+  worst: number
+  deviation: number
+}
+
+export type HeadToHead = {
+  opponent: Player
+  games: number
+  wins: number
+  losses: number
+  draws: number
+}
+
+export type RoundAverage = {
+  roundNumber: number
+  average: number
+  rounds: number
+}
+
+// desvio populacional: olhamos todas as partidas jogadas, nao uma amostra delas
+export function standardDeviation(values: number[]): number {
+  if (values.length < 2) return 0
+  const mean = average(values)
+  return Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length)
+}
+
+// quem oscila menos aparece primeiro; com menos de duas partidas nao da para
+// falar em regularidade, entao o jogador fica de fora
+export function buildConsistency(players: Player[], scores: Score[]): PlayerConsistency[] {
+  return players
+    .map((player) => {
+      const values = scores.filter((score) => score.player_id === player.id).map((score) => score.score)
+      return {
+        player,
+        games: values.length,
+        average: average(values),
+        best: values.length ? Math.max(...values) : 0,
+        worst: values.length ? Math.min(...values) : 0,
+        deviation: standardDeviation(values),
+      }
+    })
+    .filter((item) => item.games >= 2)
+    .sort((a, b) => a.deviation - b.deviation || b.average - a.average)
+}
+
+// so contam as partidas em que os dois pontuaram: se um dos dois faltou, o
+// confronto nao aconteceu
+export function buildHeadToHead(playerId: string, players: Player[], scores: Score[]): HeadToHead[] {
+  const own = new Map(scores.filter((score) => score.player_id === playerId).map((score) => [score.match_id, score.score]))
+  return players
+    .filter((player) => player.id !== playerId)
+    .map((opponent) => {
+      const record: HeadToHead = { opponent, games: 0, wins: 0, losses: 0, draws: 0 }
+      for (const score of scores) {
+        if (score.player_id !== opponent.id) continue
+        const mine = own.get(score.match_id)
+        if (mine === undefined) continue
+        record.games += 1
+        if (mine > score.score) record.wins += 1
+        else if (mine < score.score) record.losses += 1
+        else record.draws += 1
+      }
+      return record
+    })
+    .filter((record) => record.games > 0)
+    .sort((a, b) => b.games - a.games || b.wins - a.wins)
+}
+
+export function buildRoundAverages(rounds: RoundDetail[], playerId?: string): RoundAverage[] {
+  const scoped = playerId ? rounds.filter((round) => round.player_id === playerId) : rounds
+  return [1, 2, 3, 4, 5].map((roundNumber) => {
+    const values = scoped.filter((round) => round.round_number === roundNumber).map((round) => round.round_score)
+    return { roundNumber, average: average(values), rounds: values.length }
+  })
+}
+
+// colocacao dentro de uma partida; empate divide a mesma posicao
+export function getMatchPositions(matchId: string, scores: Score[]): Map<string, number> {
+  const values = scores.filter((score) => score.match_id === matchId).sort((a, b) => b.score - a.score)
+  const positions = new Map<string, number>()
+  for (const score of values) {
+    positions.set(score.player_id, values.findIndex((item) => item.score === score.score) + 1)
+  }
+  return positions
 }
 
 export function getWinnerIds(matchId: string, scores: Score[]): string[] {
