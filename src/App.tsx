@@ -26,7 +26,7 @@ function readStoredPeriod(): Period {
     if (!raw) return { preset: 'all' }
     const saved = JSON.parse(raw) as Period
     if (saved.preset === 'custom' && saved.from && saved.to) return saved
-    if (saved.preset === 'week' || saved.preset === 'month') return { preset: saved.preset }
+    if (saved.preset === 'today' || saved.preset === 'week' || saved.preset === 'month') return { preset: saved.preset }
   } catch { /* preferencia corrompida volta para o padrao */ }
   return { preset: 'all' }
 }

@@ -27,6 +27,11 @@ describe('period', () => {
     expect(toDateKey(new Date(2026, 8, 3, 23, 30))).toBe('2026-09-03')
   })
 
+  it('reduz o dia atual a um intervalo de um dia so', () => {
+    expect(resolvePeriod({ preset: 'today' }, '2026-09-03')).toEqual({ from: '2026-09-03', to: '2026-09-03' })
+    expect(filterSnapshotByPeriod(snapshot, resolvePeriod({ preset: 'today' }, '2026-09-03')).matches.map((match) => match.id)).toEqual(['m2'])
+  })
+
   it('usa a semana de segunda a domingo', () => {
     // 2026-09-03 e uma quinta-feira
     expect(resolvePeriod({ preset: 'week' }, '2026-09-03')).toEqual({ from: '2026-08-31', to: '2026-09-06' })

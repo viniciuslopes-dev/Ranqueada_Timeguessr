@@ -39,9 +39,10 @@ export function PeriodBar({ period, range, matchCount, onPreset, onCustom }: {
     <div className="period-bar">
       <div className="segmented period-filter" role="tablist" aria-label="Período dos resultados">
         <button type="button" className={period.preset === 'all' ? 'active' : ''} onClick={() => onPreset('all')}>Tudo</button>
+        <button type="button" className={period.preset === 'today' ? 'active' : ''} onClick={() => onPreset('today')}>Hoje</button>
         <button type="button" className={period.preset === 'week' ? 'active' : ''} onClick={() => onPreset('week')}>Semana</button>
         <button type="button" className={period.preset === 'month' ? 'active' : ''} onClick={() => onPreset('month')}>Mês</button>
-        <button type="button" className={period.preset === 'custom' ? 'active' : ''} onClick={onCustom}><CalendarRange size={13} /> Período</button>
+        <button type="button" className={period.preset === 'custom' ? 'active' : ''} onClick={onCustom}><CalendarRange size={12} /> Período</button>
       </div>
       {range && (
         <p className="period-summary">

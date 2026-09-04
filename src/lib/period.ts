@@ -1,9 +1,9 @@
 import type { RoomSnapshot } from '../types'
 import { formatShortDate } from './ranking'
 
-export type PeriodPreset = 'all' | 'week' | 'month' | 'custom'
+export type PeriodPreset = 'all' | 'today' | 'week' | 'month' | 'custom'
 export type Period =
-  | { preset: 'all' | 'week' | 'month' }
+  | { preset: 'all' | 'today' | 'week' | 'month' }
   | { preset: 'custom'; from: string; to: string }
 export type DateRange = { from: string; to: string } | null
 
@@ -44,6 +44,8 @@ export function resolvePeriod(period: Period, today = localToday()): DateRange {
       ? { from: period.from, to: period.to }
       : { from: period.to, to: period.from }
   }
+
+  if (period.preset === 'today') return { from: today, to: today }
 
   const reference = fromDateKey(today)
   if (period.preset === 'week') {
