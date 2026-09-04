@@ -23,6 +23,8 @@ export function MatchSheet({ players, matchNumber, busy, onClose, onSave, onImpo
   const [shareText, setShareText] = useState('')
   const [selectedPlayerId, setSelectedPlayerId] = useState(players[0]?.id ?? '')
   const [importDate, setImportDate] = useState(new Date().toISOString().slice(0, 10))
+  const [readingClipboard, setReadingClipboard] = useState(false)
+  const [clipboardError, setClipboardError] = useState('')
 
   const activeCount = Object.values(active).filter(Boolean).length
   const parsed = useMemo(() => {
@@ -52,6 +54,21 @@ export function MatchSheet({ players, matchNumber, busy, onClose, onSave, onImpo
     await onImport({ playerId: selectedPlayerId, playedAt: importDate, ...parsed.result })
   }
 
+  const pasteFromClipboard = async () => {
+    setClipboardError('')
+    setReadingClipboard(true)
+    try {
+      if (!navigator.clipboard?.readText) throw new Error('clipboard-indisponivel')
+      const copied = await navigator.clipboard.readText()
+      if (!copied.trim()) throw new Error('clipboard-vazio')
+      setShareText(copied.trim())
+    } catch {
+      setClipboardError('O navegador nao liberou a area de transferencia. Toque no campo e use Colar.')
+    } finally {
+      setReadingClipboard(false)
+    }
+  }
+
   return (
     <Sheet title="Nova partida" subtitle="Cole o resultado do WhatsApp ou digite os placares" onClose={onClose}>
       <div className="segmented segmented--wide entry-mode" aria-label="Forma de cadastrar resultado">
@@ -61,9 +78,15 @@ export function MatchSheet({ players, matchNumber, busy, onClose, onSave, onImpo
 
       {mode === 'paste' ? (
         <form className="sheet-form" onSubmit={submitImport}>
-          <label className="field paste-field">
-            <span>Mensagem compartilhada pelo TimeGuessr</span>
+          <div className="field paste-field">
+            <div className="paste-field__heading">
+              <label htmlFor="timeguessr-share">Mensagem compartilhada pelo TimeGuessr</label>
+              <button className="clipboard-button" type="button" disabled={readingClipboard} onClick={pasteFromClipboard}>
+                <ClipboardPaste size={15} /> {readingClipboard ? 'Colando…' : 'Colar do WhatsApp'}
+              </button>
+            </div>
             <textarea
+              id="timeguessr-share"
               autoFocus
               value={shareText}
               onChange={(event) => setShareText(event.target.value)}
@@ -71,8 +94,9 @@ export function MatchSheet({ players, matchNumber, busy, onClose, onSave, onImpo
               rows={7}
             />
             <small>Copie a mensagem inteira no WhatsApp e cole aqui.</small>
-          </label>
+          </div>
 
+          {clipboardError && <p className="form-error" role="alert">{clipboardError}</p>}
           {parsed.error && <p className="form-error" role="alert">{parsed.error}</p>}
           {parsed.result && (
             <div className="import-preview">

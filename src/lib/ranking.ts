@@ -1,7 +1,22 @@
 import type { GameMatch, Player, PlayerRanking, RankingMetric, Score } from '../types'
 
-const byNewest = (a: GameMatch, b: GameMatch) =>
-  new Date(b.played_at).getTime() - new Date(a.played_at).getTime()
+// Partidas importadas trazem o numero oficial do TimeGuessr: ele define a cronologia
+// competitiva mesmo quando um resultado antigo e lancado depois. Sem numero (placar
+// digitado a mao), continua valendo a data e, em empate, a ordem de cadastro.
+function compareMatchSequence(a: GameMatch, b: GameMatch, oldestFirst: boolean): number {
+  const direction = oldestFirst ? 1 : -1
+  if (typeof a.game_number === 'number' && typeof b.game_number === 'number' && a.game_number !== b.game_number) {
+    return direction * (a.game_number - b.game_number)
+  }
+  const byDate = a.played_at.localeCompare(b.played_at)
+  if (byDate) return direction * byDate
+  const byCreation = a.created_at.localeCompare(b.created_at)
+  if (byCreation) return direction * byCreation
+  return direction * a.id.localeCompare(b.id)
+}
+
+export const compareMatchesNewest = (a: GameMatch, b: GameMatch) => compareMatchSequence(a, b, false)
+export const compareMatchesOldest = (a: GameMatch, b: GameMatch) => compareMatchSequence(a, b, true)
 
 export function buildRanking(
   players: Player[],
@@ -9,7 +24,7 @@ export function buildRanking(
   scores: Score[],
   metric: RankingMetric = 'total',
 ): PlayerRanking[] {
-  const orderedMatches = [...matches].sort(byNewest)
+  const orderedMatches = [...matches].sort(compareMatchesNewest)
   const winningScores = new Map<string, number>()
 
   for (const match of matches) {

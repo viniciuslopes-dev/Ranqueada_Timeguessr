@@ -282,6 +282,11 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .paste-field textarea::placeholder { color: #a6adba; }
 .paste-field textarea:focus { border-color: #809cfa; box-shadow: 0 0 0 4px rgba(79, 124, 255, .08); outline: 0; }
 .paste-field > small { color: var(--muted); font-size: 9px; }
+.paste-field__heading { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.paste-field__heading > label { color: #566178; font-size: 12px; font-weight: 800; }
+.clipboard-button { min-height: 34px; flex: 0 0 auto; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid #c9d7ff; border-radius: 10px; color: #365fc5; background: #eef3ff; font-size: 9px; font-weight: 850; cursor: pointer; }
+.clipboard-button:active { transform: translateY(1px); }
+.clipboard-button:disabled { opacity: .6; cursor: wait; }
 .import-preview { overflow: hidden; border: 1px solid #bce5d7; border-radius: 16px; background: #f5fffb; animation: view-in .22s ease both; }
 .import-preview > header { min-height: 53px; padding: 9px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #e3f7f0; }
 .import-preview > header span { display: flex; align-items: center; gap: 6px; color: #24765f; font-size: 9px; font-weight: 800; text-transform: uppercase; }
@@ -422,6 +427,8 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
   .trend { display: none; }
   .score-input > input { width: 90px; }
   .color-picker button { width: 29px; height: 29px; }
+  .paste-field__heading { flex-direction: column; align-items: flex-start; }
+  .clipboard-button { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

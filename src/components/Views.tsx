@@ -1,6 +1,6 @@
 import { BarChart3, CalendarDays, ChevronDown, ChevronRight, Clock3, Crown, Edit3, Globe2, MoveHorizontal, Plus, Sparkles, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users } from 'lucide-react'
 import type { GameMatch, Player, PlayerRanking, RankingMetric, RoomSnapshot, Score } from '../types'
-import { buildRanking, formatScore, formatShortDate, getWinnerIds } from '../lib/ranking'
+import { buildRanking, compareMatchesNewest, compareMatchesOldest, formatScore, formatShortDate, getWinnerIds } from '../lib/ranking'
 import { EmptyState, PlayerAvatar } from './ui'
 
 const MEDALS = ['🥇', '🥈', '🥉']
@@ -104,7 +104,7 @@ function Podium({ ranking, metric }: { ranking: PlayerRanking[]; metric: Ranking
 }
 
 export function MatchesView({ snapshot, onNew, onDelete }: { snapshot: RoomSnapshot; onNew: () => void; onDelete: (match: GameMatch) => void }) {
-  const ordered = [...snapshot.matches].sort((a, b) => b.played_at.localeCompare(a.played_at) || b.created_at.localeCompare(a.created_at))
+  const ordered = [...snapshot.matches].sort(compareMatchesNewest)
   return (
     <div className="view-stack">
       <div className="page-title">
@@ -129,7 +129,7 @@ function MatchCard({ match, snapshot, index, onDelete }: { match: GameMatch; sna
     <article className="match-card">
       <header>
         <span className="match-date"><CalendarDays size={15} /> {formatShortDate(match.played_at)}</span>
-        <div><h3>{match.title}</h3><span>Partida #{snapshot.matches.length - index}</span></div>
+        <div><h3>{match.title}</h3><span>{typeof match.game_number === 'number' ? `Jogo oficial #${match.game_number}` : `Partida #${snapshot.matches.length - index}`}</span></div>
         <button className="ghost-icon" type="button" onClick={onDelete} aria-label={`Apagar ${match.title}`}><Trash2 size={16} /></button>
       </header>
       <div className="match-scores">
@@ -174,7 +174,7 @@ function MatchCard({ match, snapshot, index, onDelete }: { match: GameMatch; sna
 }
 
 function RecentMatches({ snapshot, limit }: { snapshot: RoomSnapshot; limit: number }) {
-  const matches = [...snapshot.matches].sort((a, b) => b.played_at.localeCompare(a.played_at)).slice(0, limit)
+  const matches = [...snapshot.matches].sort(compareMatchesNewest).slice(0, limit)
   return (
     <section>
       <div className="section-heading"><div><span className="section-kicker">ÚLTIMAS VIAGENS</span><h2>Partidas recentes</h2></div></div>
@@ -304,7 +304,7 @@ export function InsightsView({ snapshot }: { snapshot: RoomSnapshot }) {
 }
 
 function EvolutionChart({ snapshot }: { snapshot: RoomSnapshot }) {
-  const matches = [...snapshot.matches].sort((a, b) => a.played_at.localeCompare(b.played_at)).slice(-8)
+  const matches = [...snapshot.matches].sort(compareMatchesOldest).slice(-8)
   const players = buildRanking(snapshot.players, snapshot.matches, snapshot.scores).slice(0, 4)
   const width = 680
   const height = 260
@@ -340,7 +340,7 @@ function EvolutionChart({ snapshot }: { snapshot: RoomSnapshot }) {
             </g>
           )
         })}
-        {matches.map((match, index) => <text className="x-label" key={match.id} x={point(index, 0).x} y={height - 8}>{formatShortDate(match.played_at)}</text>)}
+        {matches.map((match, index) => <text className="x-label" key={match.id} x={point(index, 0).x} y={height - 8}>{typeof match.game_number === 'number' ? `#${match.game_number}` : formatShortDate(match.played_at)}</text>)}
           </svg>
           <div className="chart-legend">{players.map((player) => <span key={player.id}><i style={{ background: player.color }} />{player.nickname}</span>)}</div>
         </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRanking, formatScore, getWinnerIds } from './ranking'
+import { buildRanking, compareMatchesNewest, compareMatchesOldest, formatScore, getWinnerIds } from './ranking'
 import type { GameMatch, Player, Score } from '../types'
 
 const players: Player[] = [
@@ -33,6 +33,20 @@ describe('ranking', () => {
   it('trata empates como vitória para ambos', () => {
     const tied = scores.map((item) => item.match_id === 'm1' ? { ...item, score: 42000 } : item)
     expect(getWinnerIds('m1', tied)).toEqual(['a', 'b'])
+  })
+
+  it('usa o numero oficial para ordenar partidas lancadas retroativamente', () => {
+    const imported: GameMatch[] = [
+      { id: '1190', room_id: 'r', title: 'TimeGuessr #1190', game_number: 1190, played_at: '2026-09-03', created_at: '2026-09-03T12:00:00Z' },
+      { id: '1191', room_id: 'r', title: 'TimeGuessr #1191', game_number: 1191, played_at: '2026-09-01', created_at: '2026-09-01T12:00:00Z' },
+    ]
+    expect([...imported].sort(compareMatchesNewest).map((match) => match.game_number)).toEqual([1191, 1190])
+    expect([...imported].sort(compareMatchesOldest).map((match) => match.game_number)).toEqual([1190, 1191])
+  })
+
+  it('mantem a ordem por data quando nao ha numero oficial', () => {
+    expect([...matches].sort(compareMatchesNewest).map((match) => match.id)).toEqual(['m2', 'm1'])
+    expect([...matches].sort(compareMatchesOldest).map((match) => match.id)).toEqual(['m1', 'm2'])
   })
 
   it('formata placares em pt-BR', () => {
