@@ -47,6 +47,24 @@ export default function App() {
     window.setTimeout(() => setToast(''), 2800)
   }, [])
 
+  const clearModal = useCallback(() => {
+    setModal(null)
+    setEditingPlayer(undefined)
+    setEditingMatch(undefined)
+  }, [])
+
+  // Cada folha aberta vira uma entrada no historico para que o botao "voltar" do
+  // aparelho feche a folha em vez de minimizar o aplicativo.
+  const openModal = useCallback((name: Exclude<ModalName, null>) => {
+    window.history.pushState({ cronorankSheet: true }, '')
+    setModal(name)
+  }, [])
+
+  const closeModal = useCallback(() => {
+    clearModal()
+    if (window.history.state?.cronorankSheet) window.history.back()
+  }, [clearModal])
+
   const loadRoom = useCallback(async (roomId: string, quiet = false) => {
     try {
       const data = await repository.loadRoom(roomId)
@@ -85,6 +103,12 @@ export default function App() {
       void loadRoom(activeRoomId, true).catch(() => undefined)
     })
   }, [activeRoomId, snapshot?.room.id, loadRoom])
+
+  useEffect(() => {
+    const closeOnBack = () => clearModal()
+    window.addEventListener('popstate', closeOnBack)
+    return () => window.removeEventListener('popstate', closeOnBack)
+  }, [clearModal])
 
   useEffect(() => {
     const connected = () => setOnline(true)
@@ -153,9 +177,7 @@ export default function App() {
     try {
       await action()
       await loadRoom(activeRoomId)
-      setModal(null)
-      setEditingPlayer(undefined)
-      setEditingMatch(undefined)
+      closeModal()
       showToast(success)
     } catch (mutationError) {
       showToast(readableError(mutationError))
@@ -170,7 +192,7 @@ export default function App() {
       showToast('Adicione pelo menos um jogador primeiro.')
       return
     }
-    setModal('match')
+    openModal('match')
   }
 
   const saveMatch = (input: MatchInput) => mutate(() => repository.addMatch(snapshot!.room.id, input), 'Partida salva. Ranking atualizado!')
@@ -233,7 +255,7 @@ export default function App() {
           <small className={online ? '' : 'offline'}><i /> {repository.isDemo ? 'modo local' : online ? 'sincronizado' : 'sem conexão'}</small>
         </div>
         {installPrompt && <button className="topbar__action install-action" type="button" onClick={install} aria-label="Instalar aplicativo"><Download size={18} /></button>}
-        <button className="topbar__action" type="button" onClick={() => setModal('share')} aria-label="Compartilhar liga"><Share2 size={18} /></button>
+        <button className="topbar__action" type="button" onClick={() => openModal('share')} aria-label="Compartilhar liga"><Share2 size={18} /></button>
         <button className="topbar__action topbar__leave" type="button" onClick={leaveRoom} aria-label="Sair da liga"><LogOut size={18} /></button>
       </header>
 
@@ -243,8 +265,8 @@ export default function App() {
 
       <main className="app-content">
         {view === 'ranking' && <RankingView snapshot={snapshot} metric={metric} onMetric={setMetric} onNewMatch={openNewMatch} />}
-        {view === 'matches' && <MatchesView snapshot={snapshot} onNew={openNewMatch} onEdit={(match) => { setEditingMatch(match); setModal('match-edit') }} onDelete={deleteMatch} />}
-        {view === 'players' && <PlayersView snapshot={snapshot} onAdd={() => { setEditingPlayer(undefined); setModal('player') }} onEdit={(player) => { setEditingPlayer(player); setModal('player') }} />}
+        {view === 'matches' && <MatchesView snapshot={snapshot} onNew={openNewMatch} onEdit={(match) => { setEditingMatch(match); openModal('match-edit') }} onDelete={deleteMatch} />}
+        {view === 'players' && <PlayersView snapshot={snapshot} onAdd={() => { setEditingPlayer(undefined); openModal('player') }} onEdit={(player) => { setEditingPlayer(player); openModal('player') }} />}
         {view === 'insights' && <InsightsView snapshot={snapshot} />}
       </main>
 
@@ -259,10 +281,10 @@ export default function App() {
         <NavButton active={view === 'insights'} icon={<BarChart3 />} label="Estatísticas" onClick={() => setView('insights')} />
       </nav>
 
-      {modal === 'match' && <MatchSheet players={snapshot.players} matchNumber={snapshot.matches.length + 1} busy={busy} onClose={() => setModal(null)} onSave={saveMatch} onImport={importResult} />}
-      {modal === 'match-edit' && editingMatch && <MatchEditSheet match={editingMatch} busy={busy} onClose={() => { setModal(null); setEditingMatch(undefined) }} onSave={updateMatch} />}
-      {modal === 'player' && <PlayerSheet player={editingPlayer} busy={busy} onClose={() => { setModal(null); setEditingPlayer(undefined) }} onSave={savePlayer} onDelete={editingPlayer ? deletePlayer : undefined} />}
-      {modal === 'share' && <ShareSheet room={snapshot.room} onClose={() => setModal(null)} onToast={showToast} />}
+      {modal === 'match' && <MatchSheet players={snapshot.players} matchNumber={snapshot.matches.length + 1} busy={busy} onClose={closeModal} onSave={saveMatch} onImport={importResult} />}
+      {modal === 'match-edit' && editingMatch && <MatchEditSheet match={editingMatch} busy={busy} onClose={closeModal} onSave={updateMatch} />}
+      {modal === 'player' && <PlayerSheet player={editingPlayer} busy={busy} onClose={closeModal} onSave={savePlayer} onDelete={editingPlayer ? deletePlayer : undefined} />}
+      {modal === 'share' && <ShareSheet room={snapshot.room} onClose={closeModal} onToast={showToast} />}
       {toast && <div className="toast" role="status"><RefreshCw size={16} /> {toast}</div>}
     </div>
   )

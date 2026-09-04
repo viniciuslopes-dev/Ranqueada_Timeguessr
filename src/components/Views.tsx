@@ -224,8 +224,10 @@ export function PlayersView({ snapshot, onAdd, onEdit }: { snapshot: RoomSnapsho
                 <div><strong>{player.wins}</strong><span>vitórias</span></div>
                 <div><strong>{formatScore(player.best)}</strong><span>recorde</span></div>
               </div>
-              <div className="form-dots" aria-label="Forma nas últimas partidas">
-                {player.form.map((result, resultIndex) => <i key={resultIndex} className={`form-dot form-dot--${result}`} />)}
+              {/* form vem da mais recente para a mais antiga; aqui invertemos para a linha
+                  do tempo ler da esquerda para a direita, como o grafico de evolucao */}
+              <div className="form-dots" aria-label="Forma nas últimas partidas, da mais antiga para a mais recente">
+                {[...player.form].reverse().map((result, resultIndex) => <i key={resultIndex} className={`form-dot form-dot--${result}`} />)}
               </div>
             </article>
           ))}
