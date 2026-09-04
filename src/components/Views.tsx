@@ -103,7 +103,7 @@ function Podium({ ranking, metric }: { ranking: PlayerRanking[]; metric: Ranking
   )
 }
 
-export function MatchesView({ snapshot, onNew, onDelete }: { snapshot: RoomSnapshot; onNew: () => void; onDelete: (match: GameMatch) => void }) {
+export function MatchesView({ snapshot, onNew, onEdit, onDelete }: { snapshot: RoomSnapshot; onNew: () => void; onEdit: (match: GameMatch) => void; onDelete: (match: GameMatch) => void }) {
   const ordered = [...snapshot.matches].sort(compareMatchesNewest)
   return (
     <div className="view-stack">
@@ -115,14 +115,14 @@ export function MatchesView({ snapshot, onNew, onDelete }: { snapshot: RoomSnaps
         <EmptyState title="Nenhuma partida ainda" text="Quando todos terminarem o jogo, registre os placares por aqui." action={<button className="primary-button" onClick={onNew}><Plus size={18} /> Nova partida</button>} />
       ) : (
         <div className="match-list">
-          {ordered.map((match, index) => <MatchCard key={match.id} match={match} snapshot={snapshot} index={index} onDelete={() => onDelete(match)} />)}
+          {ordered.map((match, index) => <MatchCard key={match.id} match={match} snapshot={snapshot} index={index} onEdit={() => onEdit(match)} onDelete={() => onDelete(match)} />)}
         </div>
       )}
     </div>
   )
 }
 
-function MatchCard({ match, snapshot, index, onDelete }: { match: GameMatch; snapshot: RoomSnapshot; index: number; onDelete: () => void }) {
+function MatchCard({ match, snapshot, index, onEdit, onDelete }: { match: GameMatch; snapshot: RoomSnapshot; index: number; onEdit: () => void; onDelete: () => void }) {
   const values = snapshot.scores.filter((score) => score.match_id === match.id).sort((a, b) => b.score - a.score)
   const winnerIds = getWinnerIds(match.id, snapshot.scores)
   return (
@@ -130,7 +130,10 @@ function MatchCard({ match, snapshot, index, onDelete }: { match: GameMatch; sna
       <header>
         <span className="match-date"><CalendarDays size={15} /> {formatShortDate(match.played_at)}</span>
         <div><h3>{match.title}</h3><span>{typeof match.game_number === 'number' ? `Jogo oficial #${match.game_number}` : `Partida #${snapshot.matches.length - index}`}</span></div>
-        <button className="ghost-icon" type="button" onClick={onDelete} aria-label={`Apagar ${match.title}`}><Trash2 size={16} /></button>
+        <div className="match-card__actions">
+          <button className="ghost-icon ghost-icon--edit" type="button" onClick={onEdit} aria-label={`Editar ${match.title}`}><Edit3 size={16} /></button>
+          <button className="ghost-icon" type="button" onClick={onDelete} aria-label={`Apagar ${match.title}`}><Trash2 size={16} /></button>
+        </div>
       </header>
       <div className="match-scores">
         {values.map((score, scoreIndex) => {

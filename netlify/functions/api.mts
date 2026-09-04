@@ -248,6 +248,16 @@ export default async (request: Request) => {
       return json({ ok: true, matchId: matches[0].id, created: existing.length === 0 }, existing.length ? 200 : 201)
     }
 
+    if (action === 'update_match') {
+      const matchId = uuid(body.matchId, 'Partida')
+      const title = text(body.title, 'Nome da partida', 1, 50)
+      const playedAt = text(body.playedAt, 'Data', 10, 10)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(playedAt)) throw new HttpError(400, 'Data inválida.')
+      const result = await sql`update matches set title = ${title}, played_at = ${playedAt} where id = ${matchId} and room_id = ${roomId} returning id`
+      if (!result.length) throw new HttpError(404, 'Partida não encontrada.')
+      return json({ ok: true })
+    }
+
     if (action === 'delete_match') {
       const matchId = uuid(body.matchId, 'Partida')
       const result = await sql`delete from matches where id = ${matchId} and room_id = ${roomId} returning id`

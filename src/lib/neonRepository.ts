@@ -1,4 +1,4 @@
-import type { ImportResultInput, MatchInput, Player, RoomSnapshot } from '../types'
+import type { GameMatch, ImportResultInput, MatchInput, MatchUpdateInput, Player, RoomSnapshot } from '../types'
 import { isNeonApiEnabled, neonApi } from './api'
 
 const DEMO_STORAGE_KEY = 'cronorank:demo-data:v1'
@@ -173,6 +173,15 @@ export const repository = {
       round_number: round.roundNumber, round_score: round.roundScore,
       year_error: round.yearError, distance_km: round.distanceKm, created_at: createdAt,
     })))
+    saveDemoRoom(room)
+  },
+
+  async updateMatch(match: GameMatch, input: MatchUpdateInput) {
+    if (isNeonApiEnabled) { await neonApi.updateMatch(match.room_id, match.id, input, requireToken(match.room_id)); return }
+    const room = await this.loadRoom(match.room_id)
+    room.matches = room.matches.map((item) => item.id === match.id
+      ? { ...item, title: input.title, played_at: input.playedAt }
+      : item)
     saveDemoRoom(room)
   },
 

@@ -1,4 +1,4 @@
-import type { ImportResultInput, MatchInput, RoomSnapshot } from '../types'
+import type { ImportResultInput, MatchInput, MatchUpdateInput, RoomSnapshot } from '../types'
 
 type ApiPayload = Record<string, unknown>
 
@@ -64,6 +64,8 @@ export const neonApi = {
     apiRequest<{ ok: true }>('add_match', { roomId, ...input }, token),
   importResult: (roomId: string, input: ImportResultInput, token: string) =>
     apiRequest<{ ok: true; matchId: string; created: boolean }>('import_result', { roomId, ...input }, token),
+  updateMatch: (roomId: string, matchId: string, input: MatchUpdateInput, token: string) =>
+    apiRequest<{ ok: true }>('update_match', { roomId, matchId, ...input }, token),
   deleteMatch: (roomId: string, matchId: string, token: string) =>
     apiRequest<{ ok: true }>('delete_match', { roomId, matchId }, token),
 }

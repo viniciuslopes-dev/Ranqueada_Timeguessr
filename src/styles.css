@@ -179,6 +179,10 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .match-card header div span { color: var(--muted); font-size: 9px; }
 .ghost-icon { width: 34px; height: 34px; display: grid; place-items: center; color: #9ea5b2; border-radius: 10px; }
 .ghost-icon:hover { color: #c34238; background: #fff0ee; }
+.ghost-icon--edit:hover { color: #365fc5; background: #eef3ff; }
+.match-card__actions { display: flex; align-items: center; gap: 2px; }
+.edit-match-note { display: flex; align-items: flex-start; gap: 8px; padding: 11px 12px; border: 1px solid #d7e2ff; border-radius: 13px; color: #3d5480; background: #f2f6ff; font-size: 10px; line-height: 1.5; }
+.edit-match-note svg { flex: 0 0 auto; margin-top: 1px; color: #6c8ede; }
 .match-scores { padding: 8px 16px 13px; }
 .match-scores > div, .match-player-result > summary { min-height: 43px; display: flex; align-items: center; gap: 9px; border-bottom: 1px solid #f0eee9; }
 .match-scores > div:last-child { border: 0; }

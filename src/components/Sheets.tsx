@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Check, CheckCircle2, Clock3, Copy, Globe2, Keyboard, ClipboardPaste, Share2, Trophy, Trash2 } from 'lucide-react'
-import type { ImportResultInput, MatchInput, Player, Room } from '../types'
+import { CalendarDays, Check, CheckCircle2, Clock3, Copy, Globe2, Keyboard, ClipboardPaste, Share2, Trophy, Trash2 } from 'lucide-react'
+import type { GameMatch, ImportResultInput, MatchInput, MatchUpdateInput, Player, Room } from '../types'
 import { parseTimeGuessrShare } from '../lib/timeguessrParser'
 import { PLAYER_COLORS, PlayerAvatar, Sheet } from './ui'
 
@@ -195,6 +195,53 @@ export function MatchSheet({ players, matchNumber, busy, onClose, onSave, onImpo
         </button>
       </form>
       )}
+    </Sheet>
+  )
+}
+
+type MatchEditSheetProps = {
+  match: GameMatch
+  busy: boolean
+  onClose: () => void
+  onSave: (input: MatchUpdateInput) => Promise<void>
+}
+
+export function MatchEditSheet({ match, busy, onClose, onSave }: MatchEditSheetProps) {
+  const [title, setTitle] = useState(match.title)
+  const [playedAt, setPlayedAt] = useState(match.played_at.slice(0, 10))
+  const [error, setError] = useState('')
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    const cleanTitle = title.trim()
+    if (!cleanTitle) return setError('Dê um nome para a partida.')
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(playedAt)) return setError('Escolha uma data válida.')
+    setError('')
+    await onSave({ title: cleanTitle, playedAt })
+  }
+
+  return (
+    <Sheet title="Editar partida" subtitle="Corrija a data ou o nome sem relançar os placares" onClose={onClose}>
+      <form className="sheet-form" onSubmit={submit}>
+        {typeof match.game_number === 'number' && (
+          <p className="edit-match-note">
+            <CalendarDays size={15} />
+            Jogo oficial #{match.game_number}. Os placares e as rodadas continuam intactos — e a ordem do ranking segue o número oficial, não a data.
+          </p>
+        )}
+        <label className="field field--date">
+          <span>Data da partida</span>
+          <input autoFocus type="date" value={playedAt} onChange={(event) => setPlayedAt(event.target.value)} required />
+        </label>
+        <label className="field">
+          <span>Nome da partida</span>
+          <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={50} placeholder="Daily #123" />
+        </label>
+        {error && <p className="form-error" role="alert">{error}</p>}
+        <button className="primary-button primary-button--large" type="submit" disabled={busy}>
+          {busy ? 'Salvando…' : 'Salvar alterações'}
+        </button>
+      </form>
     </Sheet>
   )
 }

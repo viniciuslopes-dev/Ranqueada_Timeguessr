@@ -57,6 +57,11 @@ export type MatchInput = {
   scores: Array<{ playerId: string; score: number }>
 }
 
+export type MatchUpdateInput = {
+  title: string
+  playedAt: string
+}
+
 export type ImportResultInput = {
   playerId: string
   gameNumber: number

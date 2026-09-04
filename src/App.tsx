@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BarChart3, Download, Gamepad2, Home, LogOut, Plus, RefreshCw, Share2, Trophy, Users } from 'lucide-react'
 import { Onboarding } from './components/Onboarding'
-import { MatchSheet, PlayerSheet, ShareSheet } from './components/Sheets'
+import { MatchEditSheet, MatchSheet, PlayerSheet, ShareSheet } from './components/Sheets'
 import { InsightsView, MatchesView, PlayersView, RankingView } from './components/Views'
 import { Brand, Spinner } from './components/ui'
 import { repository } from './lib/neonRepository'
-import type { GameMatch, ImportResultInput, MatchInput, Player, RankingMetric, RoomSnapshot } from './types'
+import type { GameMatch, ImportResultInput, MatchInput, MatchUpdateInput, Player, RankingMetric, RoomSnapshot } from './types'
 
 const ACTIVE_ROOM_KEY = 'cronorank:active-room'
 type ViewName = 'ranking' | 'matches' | 'players' | 'insights'
-type ModalName = 'match' | 'player' | 'share' | null
+type ModalName = 'match' | 'match-edit' | 'player' | 'share' | null
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -34,6 +34,7 @@ export default function App() {
   const [metric, setMetric] = useState<RankingMetric>('total')
   const [modal, setModal] = useState<ModalName>(null)
   const [editingPlayer, setEditingPlayer] = useState<Player | undefined>()
+  const [editingMatch, setEditingMatch] = useState<GameMatch | undefined>()
   const [booting, setBooting] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -154,6 +155,7 @@ export default function App() {
       await loadRoom(activeRoomId)
       setModal(null)
       setEditingPlayer(undefined)
+      setEditingMatch(undefined)
       showToast(success)
     } catch (mutationError) {
       showToast(readableError(mutationError))
@@ -180,6 +182,10 @@ export default function App() {
   const deletePlayer = async () => {
     if (!editingPlayer) return
     await mutate(() => repository.deletePlayer(editingPlayer), 'Jogador removido.')
+  }
+  const updateMatch = async (input: MatchUpdateInput) => {
+    if (!editingMatch) return
+    await mutate(() => repository.updateMatch(editingMatch, input), 'Partida atualizada!')
   }
   const deleteMatch = async (match: GameMatch) => {
     if (!window.confirm(`Apagar “${match.title}” e todos os placares?`)) return
@@ -237,7 +243,7 @@ export default function App() {
 
       <main className="app-content">
         {view === 'ranking' && <RankingView snapshot={snapshot} metric={metric} onMetric={setMetric} onNewMatch={openNewMatch} />}
-        {view === 'matches' && <MatchesView snapshot={snapshot} onNew={openNewMatch} onDelete={deleteMatch} />}
+        {view === 'matches' && <MatchesView snapshot={snapshot} onNew={openNewMatch} onEdit={(match) => { setEditingMatch(match); setModal('match-edit') }} onDelete={deleteMatch} />}
         {view === 'players' && <PlayersView snapshot={snapshot} onAdd={() => { setEditingPlayer(undefined); setModal('player') }} onEdit={(player) => { setEditingPlayer(player); setModal('player') }} />}
         {view === 'insights' && <InsightsView snapshot={snapshot} />}
       </main>
@@ -254,6 +260,7 @@ export default function App() {
       </nav>
 
       {modal === 'match' && <MatchSheet players={snapshot.players} matchNumber={snapshot.matches.length + 1} busy={busy} onClose={() => setModal(null)} onSave={saveMatch} onImport={importResult} />}
+      {modal === 'match-edit' && editingMatch && <MatchEditSheet match={editingMatch} busy={busy} onClose={() => { setModal(null); setEditingMatch(undefined) }} onSave={updateMatch} />}
       {modal === 'player' && <PlayerSheet player={editingPlayer} busy={busy} onClose={() => { setModal(null); setEditingPlayer(undefined) }} onSave={savePlayer} onDelete={editingPlayer ? deletePlayer : undefined} />}
       {modal === 'share' && <ShareSheet room={snapshot.room} onClose={() => setModal(null)} onToast={showToast} />}
       {toast && <div className="toast" role="status"><RefreshCw size={16} /> {toast}</div>}
