@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays, CalendarRange, ChevronDown, ChevronRight, Clock3, Crown, Edit3, Gauge, Globe2, MoveHorizontal, Plus, Sparkles, Swords, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarCheck, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, ChevronUp, Clock3, Crown, Edit3, Flame, Globe2, MoveHorizontal, Plus, Share2, Sparkles, Swords, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users, X } from 'lucide-react'
 import type { GameMatch, Player, PlayerRanking, RankingMetric, RoomSnapshot, Score } from '../types'
-import { buildConsistency, buildHeadToHead, buildRanking, buildRoundAverages, compareMatchesNewest, compareMatchesOldest, formatScore, formatShortDate, getMatchPositions, getWinnerIds } from '../lib/ranking'
-import { formatPeriodLabel, type DateRange, type Period, type PeriodPreset } from '../lib/period'
+import { buildHeadToHead, buildMonthlyChampions, buildRanking, buildRankingShareText, buildRoundAverages, buildScaleTicks, buildStreaks, compareMatchesNewest, compareMatchesOldest, formatMonthLabel, formatScore, formatShortDate, formatCompact, getMatchPositions, getRivalries, getWinnerIds, MEDALS, niceScale, type DailyStatus } from '../lib/ranking'
+import { formatPeriodLabel, localToday, type DateRange, type Period, type PeriodPreset } from '../lib/period'
 import { EmptyState, PlayerAvatar } from './ui'
-
-const MEDALS = ['🥇', '🥈', '🥉']
 
 type Specialty = {
   player: PlayerRanking
@@ -55,6 +53,96 @@ export function PeriodBar({ period, range, matchCount, onPreset, onCustom }: {
   )
 }
 
+const TODAY_COLLAPSE_KEY = 'cronorank:today-collapsed'
+
+function TodayCard({ today, onNewMatch }: { today: DailyStatus; onNewMatch: () => void }) {
+  const complete = today.played.length > 0 && today.missing.length === 0
+  const day = localToday()
+  // quando todos ja lancaram o quadro nasce recolhido; com pendentes, so fica
+  // recolhido se o proprio usuario tiver fechado hoje
+  const [collapsed, setCollapsed] = useState(() => {
+    if (complete) return true
+    try { return localStorage.getItem(TODAY_COLLAPSE_KEY) === day } catch { return false }
+  })
+
+  useEffect(() => { if (complete) setCollapsed(true) }, [complete])
+
+  const toggle = () => setCollapsed((current) => {
+    const next = !current
+    try {
+      if (next) localStorage.setItem(TODAY_COLLAPSE_KEY, day)
+      else localStorage.removeItem(TODAY_COLLAPSE_KEY)
+    } catch { /* sem armazenamento local, a escolha vale so nesta sessao */ }
+    return next
+  })
+
+  const summary = complete
+    ? 'Todo mundo já lançou'
+    : today.missing.length <= 2
+      ? `Falta${today.missing.length === 1 ? '' : 'm'} ${today.missing.map((player) => player.nickname).join(' e ')}`
+      : `Faltam ${today.missing.length} jogadores`
+
+  if (collapsed) {
+    return (
+      <section className={`today-strip ${complete ? 'today-strip--done' : ''}`}>
+        <button className="today-strip__main" type="button" onClick={toggle} aria-expanded={false}>
+          <span className="today-card__badge">{complete ? <Check size={12} /> : <CalendarCheck size={12} />} Hoje</span>
+          <strong>{summary}</strong>
+          <ChevronDown size={16} />
+        </button>
+        <button className="today-strip__add" type="button" onClick={onNewMatch} aria-label="Lançar resultado"><Plus size={16} /></button>
+      </section>
+    )
+  }
+
+  return (
+    <section className={`today-card ${complete ? 'today-card--done' : ''}`}>
+      <header>
+        <span className="today-card__badge"><CalendarCheck size={15} /> Hoje</span>
+        <strong>
+          {complete
+            ? 'Todo mundo já lançou!'
+            : today.played.length
+              ? `${today.played.length} de ${today.played.length + today.missing.length} já lançaram`
+              : 'Ninguém lançou o resultado ainda'}
+        </strong>
+        <button className="today-card__collapse" type="button" onClick={toggle} aria-expanded aria-label="Recolher o quadro de hoje"><ChevronUp size={17} /></button>
+      </header>
+
+      {!!today.played.length && (
+        <div className="today-card__row">
+          {today.played.map((item) => (
+            <span className="today-chip today-chip--done" key={item.player.id}>
+              <PlayerAvatar player={item.player} size="sm" />
+              {item.player.nickname}
+              <b>{formatScore(item.score)}</b>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {!!today.missing.length && (
+        <div className="today-card__row">
+          {today.missing.map((player) => (
+            <span className="today-chip" key={player.id}>
+              <PlayerAvatar player={player} size="sm" />
+              {player.nickname}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <button
+        className={`primary-button ${complete ? 'today-card__cta--quiet' : ''}`}
+        type="button"
+        onClick={onNewMatch}
+      >
+        <Plus size={17} /> {complete ? 'Lançar outra partida' : 'Lançar resultado'}
+      </button>
+    </section>
+  )
+}
+
 type RankingProps = {
   snapshot: RoomSnapshot
   metric: RankingMetric
@@ -62,9 +150,13 @@ type RankingProps = {
   onNewMatch: () => void
   filtered: boolean
   onClearPeriod: () => void
+  today: DailyStatus | null
+  periodLabel: string
+  onToast: (message: string) => void
+  onOpenMatch: (match: GameMatch) => void
 }
 
-export function RankingView({ snapshot, metric, onMetric, onNewMatch, filtered, onClearPeriod }: RankingProps) {
+export function RankingView({ snapshot, metric, onMetric, onNewMatch, filtered, onClearPeriod, today, periodLabel, onToast, onOpenMatch }: RankingProps) {
   const ranking = buildRanking(snapshot.players, snapshot.matches, snapshot.scores, metric)
   const leader = ranking[0]
 
@@ -72,8 +164,17 @@ export function RankingView({ snapshot, metric, onMetric, onNewMatch, filtered, 
     return <EmptyState title="O pódio está esperando" text="Cadastre os nicks da turma para começar a liga." icon={<Users size={28} />} />
   }
 
+  const shareRanking = async () => {
+    const text = buildRankingShareText(snapshot.room.name, periodLabel, ranking, snapshot.matches.length)
+    try {
+      if (navigator.share) await navigator.share({ title: snapshot.room.name, text })
+      else { await navigator.clipboard.writeText(text); onToast('Ranking copiado! É só colar no grupo.') }
+    } catch { /* o usuario desistiu de compartilhar */ }
+  }
+
   return (
     <div className="view-stack">
+      {today && !!snapshot.players.length && <TodayCard today={today} onNewMatch={onNewMatch} />}
       {!snapshot.matches.length ? (
         filtered ? (
           <EmptyState
@@ -135,9 +236,13 @@ export function RankingView({ snapshot, metric, onMetric, onNewMatch, filtered, 
             </article>
           ))}
         </div>
+
+        {!!snapshot.matches.length && (
+          <button className="share-ranking" type="button" onClick={shareRanking}><Share2 size={16} /> Compartilhar ranking</button>
+        )}
       </section>
 
-      {!!snapshot.matches.length && <RecentMatches snapshot={snapshot} limit={3} />}
+      {!!snapshot.matches.length && <RecentMatches snapshot={snapshot} limit={3} onOpen={onOpenMatch} />}
     </div>
   )
 }
@@ -164,7 +269,7 @@ function Podium({ ranking, metric }: { ranking: PlayerRanking[]; metric: Ranking
   )
 }
 
-export function MatchesView({ snapshot, onNew, onEdit, onDelete, filtered, onClearPeriod }: { snapshot: RoomSnapshot; onNew: () => void; onEdit: (match: GameMatch) => void; onDelete: (match: GameMatch) => void; filtered: boolean; onClearPeriod: () => void }) {
+export function MatchesView({ snapshot, onNew, onEdit, onDelete, onOpen, filtered, onClearPeriod }: { snapshot: RoomSnapshot; onNew: () => void; onEdit: (match: GameMatch) => void; onDelete: (match: GameMatch) => void; onOpen: (match: GameMatch) => void; filtered: boolean; onClearPeriod: () => void }) {
   const ordered = [...snapshot.matches].sort(compareMatchesNewest)
   return (
     <div className="view-stack">
@@ -183,14 +288,14 @@ export function MatchesView({ snapshot, onNew, onEdit, onDelete, filtered, onCle
         />
       ) : (
         <div className="match-list">
-          {ordered.map((match, index) => <MatchCard key={match.id} match={match} snapshot={snapshot} index={index} onEdit={() => onEdit(match)} onDelete={() => onDelete(match)} />)}
+          {ordered.map((match, index) => <MatchCard key={match.id} match={match} snapshot={snapshot} index={index} onEdit={() => onEdit(match)} onDelete={() => onDelete(match)} onOpen={() => onOpen(match)} />)}
         </div>
       )}
     </div>
   )
 }
 
-function MatchCard({ match, snapshot, index, onEdit, onDelete }: { match: GameMatch; snapshot: RoomSnapshot; index: number; onEdit: () => void; onDelete: () => void }) {
+function MatchCard({ match, snapshot, index, onEdit, onDelete, onOpen }: { match: GameMatch; snapshot: RoomSnapshot; index: number; onEdit: () => void; onDelete: () => void; onOpen: () => void }) {
   const values = snapshot.scores.filter((score) => score.match_id === match.id).sort((a, b) => b.score - a.score)
   const winnerIds = getWinnerIds(match.id, snapshot.scores)
   return (
@@ -207,44 +312,24 @@ function MatchCard({ match, snapshot, index, onEdit, onDelete }: { match: GameMa
         {values.map((score, scoreIndex) => {
           const player = snapshot.players.find((item) => item.id === score.player_id)
           if (!player) return null
-          const details = (snapshot.rounds ?? [])
-            .filter((round) => round.match_id === match.id && round.player_id === player.id)
-            .sort((a, b) => a.round_number - b.round_number)
-          const resultSummary = (
-            <>
+          return (
+            <div key={score.id}>
               <span className="mini-position">{winnerIds.includes(player.id) ? '🏆' : scoreIndex + 1}</span>
               <PlayerAvatar player={player} size="sm" />
               <strong>{player.nickname}</strong>
               <span className="match-score-value">{formatScore(score.score)}</span>
-            </>
-          )
-          if (details.length) return (
-            <details className="match-player-result" key={score.id}>
-              <summary>{resultSummary}<ChevronDown size={16} /></summary>
-              <div className="match-round-details">
-                {details.map((round) => (
-                  <div key={round.id}>
-                    <b>{round.round_number}</b>
-                    <span><Trophy size={12} /> {formatScore(round.round_score)}</span>
-                    <span><Clock3 size={12} /> {round.year_error} ano{round.year_error === 1 ? '' : 's'}</span>
-                    <span><Globe2 size={12} /> {round.distance_km.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} km</span>
-                  </div>
-                ))}
-              </div>
-            </details>
-          )
-          return (
-            <div key={score.id}>
-              {resultSummary}
             </div>
           )
         })}
       </div>
+      <button className="match-detail-link" type="button" onClick={onOpen}>
+        Ver rodada a rodada <ChevronRight size={15} />
+      </button>
     </article>
   )
 }
 
-function RecentMatches({ snapshot, limit }: { snapshot: RoomSnapshot; limit: number }) {
+function RecentMatches({ snapshot, limit, onOpen }: { snapshot: RoomSnapshot; limit: number; onOpen: (match: GameMatch) => void }) {
   const matches = [...snapshot.matches].sort(compareMatchesNewest).slice(0, limit)
   return (
     <section>
@@ -256,13 +341,13 @@ function RecentMatches({ snapshot, limit }: { snapshot: RoomSnapshot; limit: num
           const winner = snapshot.players.find((player) => winners.includes(player.id))
           const highScore = Math.max(...matchScores.map((item) => item.score))
           return (
-            <article key={match.id}>
+            <button type="button" key={match.id} onClick={() => onOpen(match)} aria-label={`Ver detalhes de ${match.title}`}>
               <span className="date-badge"><strong>{formatShortDate(match.played_at).split(' ')[0]}</strong><small>{formatShortDate(match.played_at).split(' ')[1]}</small></span>
               <div><strong>{match.title}</strong><span>{winner ? `${winner.nickname} venceu` : 'Sem placares'}</span></div>
               {winner && <PlayerAvatar player={winner} size="sm" />}
               <strong className="recent-score">{Number.isFinite(highScore) ? formatScore(highScore) : '—'}</strong>
               <ChevronRight size={17} />
-            </article>
+            </button>
           )
         })}
       </div>
@@ -306,7 +391,7 @@ export function PlayersView({ snapshot, onAdd, onEdit }: { snapshot: RoomSnapsho
   )
 }
 
-export function InsightsView({ snapshot, filtered, onClearPeriod }: { snapshot: RoomSnapshot; filtered: boolean; onClearPeriod: () => void }) {
+export function InsightsView({ snapshot, history, filtered, onClearPeriod }: { snapshot: RoomSnapshot; history: RoomSnapshot; filtered: boolean; onClearPeriod: () => void }) {
   const ranking = buildRanking(snapshot.players, snapshot.matches, snapshot.scores)
   const allScores = snapshot.scores.map((item) => item.score)
   const best = allScores.length ? Math.max(...allScores) : 0
@@ -316,7 +401,6 @@ export function InsightsView({ snapshot, filtered, onClearPeriod }: { snapshot: 
   const recordNames = recordHolders.map((player) => player.nickname).join(' e ')
   const recordMatch = snapshot.matches.find((match) => match.id === recordScores[0]?.match_id)
   const champion = ranking[0]
-  const steadiest = buildConsistency(snapshot.players, snapshot.scores)[0]
   const specialties: Specialty[] = ranking.map((player) => {
     const rounds = (snapshot.rounds ?? []).filter((round) => round.player_id === player.id)
     const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length
@@ -353,7 +437,7 @@ export function InsightsView({ snapshot, filtered, onClearPeriod }: { snapshot: 
             <div className="section-heading"><div><span className="section-kicker">PLACAR POR PARTIDA</span><h2>Corrida no tempo</h2></div></div>
             <EvolutionChart snapshot={snapshot} />
           </section>
-          <ConsistencyCard snapshot={snapshot} />
+          <StreaksCard snapshot={snapshot} />
           <section>
             <div className="section-heading"><div><span className="section-kicker">PRECISÃO POR JOGADOR</span><h2>Especialidades</h2></div></div>
             {measured.length ? (
@@ -369,41 +453,13 @@ export function InsightsView({ snapshot, filtered, onClearPeriod }: { snapshot: 
               <article className="achievement achievement--gold"><span><Crown /></span><div><small>DONO DO TEMPO</small><strong>{champion?.nickname ?? '—'}</strong><p>Lidera o placar geral</p></div></article>
               <article className="achievement achievement--mint"><span><Target /></span><div><small>{filtered ? 'RECORDE DO PERÍODO' : 'RECORDE ETERNO'}</small><strong>{recordNames || 'Aguardando'}</strong><p>{recordHolders.length ? `${formatScore(best)} pts${recordMatch ? ` em ${recordMatch.title}` : ''}` : 'Registre um placar para abrir o recorde'}</p></div></article>
               <article className="achievement achievement--coral"><span><Clock3 /></span><div><small>MESTRE DO TEMPO</small><strong>{timeMaster?.player.nickname ?? 'Aguardando'}</strong><p>{timeMaster ? `${formatAverage(timeMaster.yearError)} anos de erro médio` : 'Importe resultados detalhados'}</p></div></article>
-              <article className="achievement achievement--violet"><span><Gauge /></span><div><small>RELÓGIO SUÍÇO</small><strong>{steadiest?.player.nickname ?? 'Aguardando'}</strong><p>{steadiest ? `Oscila só ±${formatScore(steadiest.deviation)} pts` : 'Precisa de duas partidas'}</p></div></article>
               <article className="achievement achievement--blue"><span><Globe2 /></span><div><small>MESTRE DO MAPA</small><strong>{geoMaster?.player.nickname ?? 'Aguardando'}</strong><p>{geoMaster ? `${formatAverage(geoMaster.distanceKm)} km de distância média` : 'Importe resultados detalhados'}</p></div></article>
             </div>
           </section>
+          <ChampionsCard snapshot={history} />
         </>
       )}
     </div>
-  )
-}
-
-function ConsistencyCard({ snapshot }: { snapshot: RoomSnapshot }) {
-  const consistency = buildConsistency(snapshot.players, snapshot.scores)
-  if (!consistency.length) return null
-
-  return (
-    <section>
-      <div className="section-heading"><div><span className="section-kicker">OSCILAÇÃO DOS PLACARES</span><h2>Regularidade</h2></div></div>
-      <div className="consistency-card">
-        {consistency.map((item) => (
-          <article key={item.player.id}>
-            <div className="consistency-identity">
-              <PlayerAvatar player={item.player} size="sm" />
-              <strong>{item.player.nickname}</strong>
-              <span>±{formatScore(item.deviation)}</span>
-            </div>
-            <div className="consistency-range" role="img" aria-label={`De ${formatScore(item.worst)} a ${formatScore(item.best)} pontos, média de ${formatScore(item.average)}`}>
-              <i style={{ left: `${(item.worst / 50000) * 100}%`, right: `${100 - (item.best / 50000) * 100}%`, background: item.player.color }} />
-              <b style={{ left: `${(item.average / 50000) * 100}%` }} />
-            </div>
-            <div className="consistency-scale"><small>{formatScore(item.worst)}</small><small>{formatScore(item.best)}</small></div>
-          </article>
-        ))}
-      </div>
-      <p className="section-note">A barra vai do pior ao melhor placar e o traço marca a média. Quanto menor o ±, mais previsível é o jogador.</p>
-    </section>
   )
 }
 
@@ -417,6 +473,7 @@ function PlayerProfile({ snapshot }: { snapshot: RoomSnapshot }) {
   const averages = buildRoundAverages(rounds, selected.id)
   const league = buildRoundAverages(rounds)
   const duels = buildHeadToHead(selected.id, snapshot.players, snapshot.scores)
+  const rivalries = getRivalries(duels)
   const measured = averages.some((item) => item.rounds > 0)
 
   return (
@@ -464,6 +521,24 @@ function PlayerProfile({ snapshot }: { snapshot: RoomSnapshot }) {
 
       <article className="profile-block">
         <header><Swords size={15} /><div><strong>Confronto direto</strong><span>Só contam as partidas em que os dois jogaram</span></div></header>
+        {(rivalries.nemesis || rivalries.favourite) && (
+          <div className="rivalry-row">
+            {rivalries.nemesis && (
+              <span className="rivalry rivalry--bad">
+                <small>ALGOZ</small>
+                <strong>{rivalries.nemesis.opponent.nickname}</strong>
+                <b>{rivalries.nemesis.wins}–{rivalries.nemesis.losses}</b>
+              </span>
+            )}
+            {rivalries.favourite && (
+              <span className="rivalry rivalry--good">
+                <small>FREGUÊS</small>
+                <strong>{rivalries.favourite.opponent.nickname}</strong>
+                <b>{rivalries.favourite.wins}–{rivalries.favourite.losses}</b>
+              </span>
+            )}
+          </div>
+        )}
         {duels.length ? (
           <div className="duel-list">
             {duels.map((duel) => (
@@ -486,6 +561,62 @@ function PlayerProfile({ snapshot }: { snapshot: RoomSnapshot }) {
           <p className="profile-empty">Ainda não houve partida com outro jogador para comparar.</p>
         )}
       </article>
+    </section>
+  )
+}
+
+function StreaksCard({ snapshot }: { snapshot: RoomSnapshot }) {
+  const streaks = buildStreaks(snapshot.players, snapshot.matches, snapshot.scores)
+  if (!streaks.some((item) => item.longest > 0)) return null
+
+  return (
+    <section>
+      <div className="section-heading"><div><span className="section-kicker">VITÓRIAS SEGUIDAS</span><h2>Sequências</h2></div></div>
+      <div className="streak-card">
+        {streaks.map((item) => (
+          <article key={item.player.id}>
+            <PlayerAvatar player={item.player} size="sm" />
+            <strong>{item.player.nickname}</strong>
+            <span className={`streak-now ${item.current > 0 ? 'streak-now--hot' : ''}`}>
+              {item.current > 0 ? <><Flame size={13} /> {item.current}</> : '—'}
+            </span>
+            <span className="streak-best">recorde <b>{item.longest}</b></span>
+          </article>
+        ))}
+      </div>
+      <p className="section-note">Sequência atual à esquerda e o recorde à direita. Faltar em uma partida não zera a sequência — só não a aumenta.</p>
+    </section>
+  )
+}
+
+function ChampionsCard({ snapshot }: { snapshot: RoomSnapshot }) {
+  const champions = buildMonthlyChampions(snapshot.players, snapshot.matches, snapshot.scores)
+    .filter((item) => item.champion)
+  if (!champions.length) return null
+  const runningMonth = localToday().slice(0, 7)
+
+  return (
+    <section>
+      <div className="section-heading"><div><span className="section-kicker">TEMPORADAS</span><h2>Campeões do mês</h2></div></div>
+      <div className="champion-card">
+        {champions.map((item) => (
+          <article key={item.month}>
+            <div className="champion-month">
+              <strong>{formatMonthLabel(item.month)}</strong>
+              {item.month === runningMonth
+                ? <small className="champion-live">em disputa</small>
+                : <small>{item.matches} partida{item.matches === 1 ? '' : 's'}</small>}
+            </div>
+            <PlayerAvatar player={item.champion!} size="sm" />
+            <div className="champion-name">
+              <strong>{item.champion!.nickname}</strong>
+              <small>{formatScore(item.champion!.total)} pts · {item.champion!.wins} vitória{item.champion!.wins === 1 ? '' : 's'}</small>
+            </div>
+            <span className="champion-medal">🏆</span>
+          </article>
+        ))}
+      </div>
+      <p className="section-note">O histórico ignora o filtro de período — ele é a memória da liga inteira.</p>
     </section>
   )
 }
@@ -538,26 +669,66 @@ function SpecialtyTable({ specialties }: { specialties: Specialty[] }) {
   )
 }
 
+type ChartMode = 'total' | 'match' | 'position'
+
+const CHART_MODES: Array<{ key: ChartMode; label: string }> = [
+  { key: 'total', label: 'Acumulado' },
+  { key: 'match', label: 'Por partida' },
+  { key: 'position', label: 'Colocação' },
+]
+
 function EvolutionChart({ snapshot }: { snapshot: RoomSnapshot }) {
-  const [mode, setMode] = useState<'score' | 'position'>('score')
-  const matches = [...snapshot.matches].sort(compareMatchesOldest).slice(-8)
+  const [mode, setMode] = useState<ChartMode>('total')
+  const ordered = [...snapshot.matches].sort(compareMatchesOldest)
+  const matches = ordered.slice(-8)
   const players = buildRanking(snapshot.players, snapshot.matches, snapshot.scores).slice(0, 4)
   const positions = matches.map((match) => getMatchPositions(match.id, snapshot.scores))
   const lastPlace = Math.max(2, ...positions.map((item) => item.size))
+
+  const scoreOf = (matchId: string, playerId: string) =>
+    snapshot.scores.find((item) => item.match_id === matchId && item.player_id === playerId)?.score ?? null
+
+  // o acumulado corre sobre todas as partidas do periodo e so mostra a janela
+  // visivel, para os valores baterem com os totais do ranking
+  const totals = new Map(players.map((player) => {
+    let sum = 0
+    const running = ordered.map((match) => {
+      sum += scoreOf(match.id, player.id) ?? 0
+      return sum
+    })
+    return [player.id, running.slice(ordered.length - matches.length)]
+  }))
+
+  const valueAt = (playerId: string, index: number): number | null => {
+    if (mode === 'total') return totals.get(playerId)?.[index] ?? null
+    if (mode === 'position') return positions[index].get(playerId) ?? null
+    return scoreOf(matches[index].id, playerId)
+  }
+
+  const values = players.flatMap((player) =>
+    matches.map((_, index) => valueAt(player.id, index)).filter((value): value is number => value !== null))
+  const scale = mode === 'position'
+    ? { min: 1, max: lastPlace, step: 1 }
+    : niceScale(Math.min(...values), Math.max(...values))
+  const span = scale.max - scale.min || 1
+
   const width = 680
   const height = 260
   const padding = { top: 20, right: 16, bottom: 34, left: 45 }
   const plotWidth = width - padding.left - padding.right
   const plotHeight = height - padding.top - padding.bottom
   const columnX = (index: number) => padding.left + (matches.length === 1 ? plotWidth / 2 : (index / (matches.length - 1)) * plotWidth)
-  // ratio 1 e o topo do grafico, 0 a base
+  // ratio 1 e o topo do grafico; na colocacao o 1o lugar e que fica em cima
+  const ratioOf = (value: number) => mode === 'position'
+    ? 1 - (value - scale.min) / span
+    : (value - scale.min) / span
   const rowY = (ratio: number) => padding.top + plotHeight - ratio * plotHeight
-  const scoreRatio = (score: number) => score / 50000
-  const placeRatio = (place: number) => 1 - (place - 1) / (lastPlace - 1)
 
-  const ticks = mode === 'score'
-    ? [0, 10000, 20000, 30000, 40000, 50000].map((value) => ({ key: value, ratio: scoreRatio(value), label: `${value / 1000}k` }))
-    : Array.from({ length: lastPlace }, (_, index) => ({ key: index, ratio: placeRatio(index + 1), label: `${index + 1}º` }))
+  const ticks = buildScaleTicks(scale).map((value) => ({
+    key: value,
+    ratio: ratioOf(value),
+    label: mode === 'position' ? `${value}º` : formatCompact(value, scale.step),
+  }))
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const [axisShift, setAxisShift] = useState(0)
@@ -587,28 +758,38 @@ function EvolutionChart({ snapshot }: { snapshot: RoomSnapshot }) {
   const series = players.map((player) => ({
     player,
     points: matches
-      .map((match, index) => {
-        if (mode === 'position') {
-          const place = positions[index].get(player.id)
-          return place === undefined ? null : { x: columnX(index), y: rowY(placeRatio(place)) }
-        }
-        const score = snapshot.scores.find((item) => item.match_id === match.id && item.player_id === player.id)
-        return score ? { x: columnX(index), y: rowY(scoreRatio(score.score)) } : null
+      .map((_, index) => {
+        const value = valueAt(player.id, index)
+        return value === null ? null : { x: columnX(index), y: rowY(ratioOf(value)) }
       })
       .filter((item): item is { x: number; y: number } => item !== null),
   }))
 
+  const note = mode === 'total'
+    ? 'Soma de pontos ao longo das partidas — quem sobe mais rápido está abrindo vantagem.'
+    : mode === 'match'
+      ? 'Placar de cada partida, na escala dos resultados da liga.'
+      : 'Colocação dentro de cada partida.'
+
   return (
     <>
       <div className="segmented chart-mode" role="tablist" aria-label="Leitura do gráfico">
-        <button type="button" className={mode === 'score' ? 'active' : ''} onClick={() => setMode('score')}>Pontos</button>
-        <button type="button" className={mode === 'position' ? 'active' : ''} onClick={() => setMode('position')}>Colocação</button>
+        {CHART_MODES.map((item) => (
+          <button
+            className={item.key === mode ? 'active' : ''}
+            type="button"
+            key={item.key}
+            onClick={() => setMode(item.key)}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
       <div className="chart-scroll-area">
         <p className="chart-swipe-hint"><MoveHorizontal size={15} /> Deslize o gráfico para os lados</p>
         <div className="chart-wrap" ref={wrapRef} tabIndex={0} role="region" aria-label="Gráfico com rolagem horizontal">
           <div className="chart-stage">
-            <svg className="line-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={mode === 'score' ? 'Evolução de pontuação dos melhores jogadores' : 'Colocação dos melhores jogadores em cada partida'}>
+            <svg className="line-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={note}>
               {ticks.map((tick) => <line key={tick.key} x1={padding.left} x2={width - padding.right} y1={rowY(tick.ratio)} y2={rowY(tick.ratio)} />)}
               {series.map((item) => (
                 <g key={item.player.id} className="chart-series">
@@ -626,6 +807,7 @@ function EvolutionChart({ snapshot }: { snapshot: RoomSnapshot }) {
           </div>
         </div>
       </div>
+      <p className="section-note">{note}{ordered.length > matches.length && ` Mostrando as últimas ${matches.length} de ${ordered.length} partidas.`}</p>
     </>
   )
 }

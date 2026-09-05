@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildConsistency, buildHeadToHead, buildRanking, buildRoundAverages, compareMatchesNewest, compareMatchesOldest, formatScore, getMatchPositions, getWinnerIds, standardDeviation } from './ranking'
+import { buildMatchSummary, buildScaleTicks, formatCompact, getHardestRound, niceScale, buildMonthlyChampions, buildRankingShareText, buildStreaks, formatMonthLabel, getRivalries, buildHeadToHead, buildRanking, buildRoundAverages, getDailyStatus, compareMatchesNewest, compareMatchesOldest, formatScore, getMatchPositions, getWinnerIds } from './ranking'
 import type { GameMatch, Player, RoundDetail, Score } from '../types'
 
 const players: Player[] = [
@@ -49,28 +49,6 @@ describe('ranking', () => {
     expect([...matches].sort(compareMatchesOldest).map((match) => match.id)).toEqual(['m1', 'm2'])
   })
 
-  it('mede a regularidade pelo desvio dos placares', () => {
-    expect(standardDeviation([40000, 40000])).toBe(0)
-    expect(Math.round(standardDeviation([30000, 50000]))).toBe(10000)
-    // uma partida so nao diz nada sobre oscilacao
-    expect(standardDeviation([40000])).toBe(0)
-
-    const regular: Score[] = [
-      { id: '1', room_id: 'r', match_id: 'm1', player_id: 'a', score: 40000, created_at: '' },
-      { id: '2', room_id: 'r', match_id: 'm2', player_id: 'a', score: 40000, created_at: '' },
-      { id: '3', room_id: 'r', match_id: 'm1', player_id: 'b', score: 30000, created_at: '' },
-      { id: '4', room_id: 'r', match_id: 'm2', player_id: 'b', score: 50000, created_at: '' },
-    ]
-    const consistency = buildConsistency(players, regular)
-    expect(consistency.map((item) => item.player.id)).toEqual(['a', 'b'])
-    expect(consistency[1]).toMatchObject({ best: 50000, worst: 30000, games: 2 })
-  })
-
-  it('deixa de fora quem jogou menos de duas partidas', () => {
-    const single = scores.filter((item) => item.match_id === 'm1' && item.player_id === 'a')
-    expect(buildConsistency(players, single)).toHaveLength(0)
-  })
-
   it('conta o confronto direto so nas partidas em que os dois pontuaram', () => {
     const [record] = buildHeadToHead('a', players, scores)
     expect(record).toMatchObject({ games: 2, wins: 1, losses: 1, draws: 0 })
@@ -99,6 +77,169 @@ describe('ranking', () => {
     const tied = scores.map((item) => item.match_id === 'm1' ? { ...item, score: 42000 } : item)
     expect(getMatchPositions('m1', tied).get('a')).toBe(1)
     expect(getMatchPositions('m1', tied).get('b')).toBe(1)
+  })
+
+  it('separa quem ja lancou o resultado do dia de quem falta', () => {
+    const status = getDailyStatus(players, matches, scores, '2026-01-02')
+    expect(status.matches.map((match) => match.id)).toEqual(['m2'])
+    expect(status.played.map((item) => item.player.id)).toEqual(['a', 'b'])
+    expect(status.missing).toHaveLength(0)
+
+    const partial = getDailyStatus(players, matches, scores.filter((item) => item.player_id === 'a'), '2026-01-02')
+    expect(partial.played.map((item) => item.player.id)).toEqual(['a'])
+    expect(partial.missing.map((player) => player.id)).toEqual(['b'])
+  })
+
+  it('trata um dia sem nenhuma partida', () => {
+    const status = getDailyStatus(players, matches, scores, '2026-03-20')
+    expect(status.matches).toHaveLength(0)
+    expect(status.played).toHaveLength(0)
+    expect(status.missing).toHaveLength(2)
+  })
+
+  it('monta o texto do ranking para compartilhar', () => {
+    const text = buildRankingShareText('Liga dos Crononautas', 'Semana · 1–7 set', buildRanking(players, matches, scores), 2)
+    expect(text).toContain('CronoRank — Liga dos Crononautas')
+    expect(text).toContain('Semana · 1–7 set · 2 partidas')
+    expect(text).toContain('🥇 Ana — 85.000 pts · 1 vitória')
+    // quem nao pontuou no periodo fica de fora da lista
+    expect(buildRankingShareText('Liga', 'Tudo', buildRanking(players, matches, []), 0)).toContain('Ninguém pontuou ainda.')
+  })
+
+  it('conta a sequencia atual e o recorde de vitorias', () => {
+    // Ana perde a m1 e vence a m2: recorde 1, sequencia atual 1
+    const streaks = buildStreaks(players, matches, scores)
+    expect(streaks.find((item) => item.player.id === 'a')).toMatchObject({ current: 1, longest: 1, games: 2 })
+    // Beto vence a m1 e perde a m2: recorde 1, mas a sequencia atual zerou
+    expect(streaks.find((item) => item.player.id === 'b')).toMatchObject({ current: 0, longest: 1, games: 2 })
+  })
+
+  it('nao zera a sequencia quando o jogador faltou na partida', () => {
+    const semBeto = scores.filter((item) => !(item.match_id === 'm1' && item.player_id === 'b'))
+    // sem placar na m1, Ana vence sozinha; Beto so jogou a m2 e perdeu
+    const streaks = buildStreaks(players, matches, semBeto)
+    expect(streaks.find((item) => item.player.id === 'b')).toMatchObject({ games: 1, current: 0 })
+
+    const tres: GameMatch[] = [...matches, { id: 'm3', room_id: 'r', title: 'Tres', game_number: null, played_at: '2026-01-03', created_at: '' }]
+    const comFalta: Score[] = [
+      { id: '5', room_id: 'r', match_id: 'm1', player_id: 'a', score: 45000, created_at: '' },
+      { id: '6', room_id: 'r', match_id: 'm1', player_id: 'b', score: 30000, created_at: '' },
+      { id: '7', room_id: 'r', match_id: 'm2', player_id: 'b', score: 30000, created_at: '' },
+      { id: '8', room_id: 'r', match_id: 'm3', player_id: 'a', score: 45000, created_at: '' },
+      { id: '9', room_id: 'r', match_id: 'm3', player_id: 'b', score: 30000, created_at: '' },
+    ]
+    // Ana venceu a m1 e a m3, e nao jogou a m2 no meio: a sequencia segue valendo
+    expect(buildStreaks(players, tres, comFalta).find((item) => item.player.id === 'a')).toMatchObject({ current: 2, longest: 2, games: 2 })
+  })
+
+  it('elege o campeao de cada mes, do mais recente para o mais antigo', () => {
+    const doisMeses: GameMatch[] = [
+      { id: 'm1', room_id: 'r', title: 'Jan', game_number: null, played_at: '2026-01-10', created_at: '' },
+      { id: 'm2', room_id: 'r', title: 'Fev', game_number: null, played_at: '2026-02-10', created_at: '' },
+    ]
+    const champions = buildMonthlyChampions(players, doisMeses, scores)
+    expect(champions.map((item) => item.month)).toEqual(['2026-02', '2026-01'])
+    expect(champions[0].champion?.id).toBe('a')
+    expect(champions[1].champion?.id).toBe('b')
+    expect(champions[0].matches).toBe(1)
+  })
+
+  it('destaca o algoz e o fregues no confronto direto', () => {
+    const duels = [
+      { opponent: players[0], games: 10, wins: 2, losses: 8, draws: 0 },
+      { opponent: players[1], games: 10, wins: 7, losses: 3, draws: 0 },
+    ]
+    const { nemesis, favourite } = getRivalries(duels)
+    expect(nemesis?.opponent.id).toBe('a')
+    expect(favourite?.opponent.id).toBe('b')
+
+    // saldo empatado nao rende nem algoz nem fregues
+    expect(getRivalries([{ opponent: players[0], games: 2, wins: 1, losses: 1, draws: 0 }]))
+      .toEqual({ nemesis: null, favourite: null })
+    expect(getRivalries([])).toEqual({ nemesis: null, favourite: null })
+  })
+
+  it('formata o mes em portugues', () => {
+    expect(formatMonthLabel('2026-09')).toBe('Setembro de 2026')
+  })
+
+  it('resume a partida com a diferenca para o vencedor', () => {
+    const { results } = buildMatchSummary('m1', players, scores, [])
+    expect(results.map((item) => [item.player.id, item.position, item.gap]))
+      .toEqual([['b', 1, 0], ['a', 2, -2000]])
+  })
+
+  it('divide a colocacao e zera a diferenca quando ha empate', () => {
+    const tied = scores.map((item) => item.match_id === 'm1' ? { ...item, score: 42000 } : item)
+    const { results } = buildMatchSummary('m1', players, tied, [])
+    expect(results.every((item) => item.position === 1 && item.gap === 0)).toBe(true)
+  })
+
+  it('monta a grade rodada a rodada e aponta a mais dificil', () => {
+    const detail = (player: string, roundNumber: number, roundScore: number): RoundDetail => ({
+      id: `${player}${roundNumber}`, room_id: 'r', match_id: 'm1', player_id: player,
+      round_number: roundNumber, round_score: roundScore, year_error: 2, distance_km: 10, created_at: '',
+    })
+    const rounds = [
+      detail('a', 1, 9000), detail('b', 1, 8000),
+      detail('a', 2, 1000), detail('b', 2, 2000),
+      detail('a', 3, 7000), detail('b', 3, 7000),
+    ]
+    const summary = buildMatchSummary('m1', players, scores, rounds)
+    // so as rodadas com placar entram na grade
+    expect(summary.rounds.map((round) => round.roundNumber)).toEqual([1, 2, 3])
+    // nos pontos o melhor e o maior; no erro de ano e na distancia, o menor
+    expect(summary.rounds[0].best).toEqual({ score: 9000, year: 2, distance: 10 })
+    expect(summary.rounds[2].entries.every((entry) => entry.detail?.round_score === 7000)).toBe(true)
+    // a 2a teve a menor media de pontos da turma
+    expect(getHardestRound(summary.rounds, 'score')?.roundNumber).toBe(2)
+    // e na distancia todos erraram igual, entao a 1a resolve o empate
+    expect(getHardestRound(summary.rounds, 'distance')?.roundNumber).toBe(1)
+  })
+
+  it('funciona em partida digitada a mao, sem rodadas', () => {
+    const summary = buildMatchSummary('m1', players, scores, [])
+    expect(summary.rounds).toHaveLength(0)
+    expect(getHardestRound(summary.rounds, 'score')).toBeNull()
+    expect(summary.results).toHaveLength(2)
+  })
+
+  it('escolhe um intervalo redondo em volta dos dados', () => {
+    // placares reais de 31k a 48k nao devem virar uma regua de 0 a 50k
+    const scale = niceScale(31270, 48120)
+    expect(scale.min).toBeLessThanOrEqual(31270)
+    expect(scale.max).toBeGreaterThanOrEqual(48120)
+    expect(scale.min).toBeGreaterThan(0)
+    expect(buildScaleTicks(scale)).toContain(scale.min)
+    expect(buildScaleTicks(scale)).toContain(scale.max)
+    expect(buildScaleTicks(scale).length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('abre espaco quando todos os valores sao iguais', () => {
+    const scale = niceScale(40000, 40000)
+    expect(scale.max).toBeGreaterThan(scale.min)
+    expect(buildScaleTicks(scale).length).toBeGreaterThan(1)
+  })
+
+  it('cai num intervalo padrao quando nao ha dado nenhum', () => {
+    expect(niceScale(Infinity, -Infinity)).toEqual({ min: 0, max: 50000, step: 10000 })
+  })
+
+  it('encurta o rotulo do eixo conforme a grandeza cresce', () => {
+    expect(formatCompact(35000, 5000)).toBe('35k')
+    expect(formatCompact(37500, 2500)).toBe('37,5k')
+    // um ano de acumulado passa de um milhao e precisa virar M
+    expect(formatCompact(14600000, 200000)).toBe('14,6M')
+    expect(formatCompact(46000000, 200000)).toBe('46,0M')
+    expect(formatCompact(840, 100)).toBe('840')
+  })
+
+  it('nunca repete o rotulo entre dois tiques vizinhos', () => {
+    for (const [min, max] of [[31270, 48120], [180000, 219466], [14200000, 15400000], [45400000, 46000000]]) {
+      const scale = niceScale(min, max)
+      const labels = buildScaleTicks(scale).map((value) => formatCompact(value, scale.step))
+      expect(new Set(labels).size).toBe(labels.length)
+    }
   })
 
   it('formata placares em pt-BR', () => {

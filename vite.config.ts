@@ -19,6 +19,13 @@ export default defineConfig({
         start_url: '/',
         scope: '/',
         categories: ['games', 'social'],
+        // permite receber o resultado direto da folha de compartilhamento do
+        // WhatsApp; o texto chega em ?text= e o App abre a folha ja preenchida
+        share_target: {
+          action: '/',
+          method: 'GET',
+          params: { title: 'title', text: 'text', url: 'url' }
+        },
         icons: [
           { src: '/app-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: '/app-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },

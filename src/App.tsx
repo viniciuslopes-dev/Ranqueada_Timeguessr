@@ -1,17 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BarChart3, Download, Gamepad2, Home, LogOut, Plus, RefreshCw, Share2, Trophy, Users } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { BarChart3, Download, Gamepad2, Home, LogOut, RefreshCw, Share2, Trophy, Users } from 'lucide-react'
 import { Onboarding } from './components/Onboarding'
-import { MatchEditSheet, MatchSheet, PeriodSheet, PlayerSheet, ShareSheet } from './components/Sheets'
+import { MatchDetailSheet, MatchEditSheet, MatchSheet, PeriodSheet, PlayerSheet, ShareSheet } from './components/Sheets'
 import { InsightsView, MatchesView, PeriodBar, PlayersView, RankingView } from './components/Views'
+import { getDailyStatus } from './lib/ranking'
 import { Brand, Spinner } from './components/ui'
-import { filterSnapshotByPeriod, isWithinRange, resolvePeriod, type Period, type PeriodPreset } from './lib/period'
+import { filterSnapshotByPeriod, formatPeriodLabel, isWithinRange, localToday, resolvePeriod, type Period, type PeriodPreset } from './lib/period'
 import { repository } from './lib/neonRepository'
 import type { GameMatch, ImportResultInput, MatchInput, MatchUpdateInput, Player, RankingMetric, RoomSnapshot } from './types'
 
 const ACTIVE_ROOM_KEY = 'cronorank:active-room'
 const PERIOD_KEY = 'cronorank:period'
 type ViewName = 'ranking' | 'matches' | 'players' | 'insights'
-type ModalName = 'match' | 'match-edit' | 'period' | 'player' | 'share' | null
+type ModalName = 'match' | 'match-edit' | 'match-detail' | 'period' | 'player' | 'share' | null
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -43,6 +44,12 @@ function readableError(error: unknown): string {
 
 export default function App() {
   const queryCode = useMemo(() => new URLSearchParams(window.location.search).get('room')?.toUpperCase() ?? '', [])
+  // texto recebido pela folha de compartilhamento do sistema (share_target)
+  const sharedResult = useMemo(() => {
+    const params = new URLSearchParams(window.location.search)
+    return [params.get('text'), params.get('title')].filter(Boolean).join('\n').trim()
+  }, [])
+  const [pendingShare, setPendingShare] = useState(sharedResult)
   const [snapshot, setSnapshot] = useState<RoomSnapshot | null>(null)
   const [activeRoomId, setActiveRoomId] = useState(() => localStorage.getItem(ACTIVE_ROOM_KEY))
   const [view, setView] = useState<ViewName>('ranking')
@@ -50,6 +57,7 @@ export default function App() {
   const [modal, setModal] = useState<ModalName>(null)
   const [editingPlayer, setEditingPlayer] = useState<Player | undefined>()
   const [editingMatch, setEditingMatch] = useState<GameMatch | undefined>()
+  const [detailMatch, setDetailMatch] = useState<GameMatch | undefined>()
   const [booting, setBooting] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -57,6 +65,7 @@ export default function App() {
   const [online, setOnline] = useState(navigator.onLine)
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null)
   const [period, setPeriod] = useState<Period>(readStoredPeriod)
+  const seenScores = useRef<Set<string>>(new Set())
 
   const showToast = useCallback((message: string) => {
     setToast(message)
@@ -65,6 +74,8 @@ export default function App() {
 
   const range = useMemo(() => resolvePeriod(period), [period])
   const visible = useMemo(() => snapshot ? filterSnapshotByPeriod(snapshot, range) : null, [snapshot, range])
+  // o quadro de hoje ignora o filtro: ele responde "quem ja lancou o de hoje?"
+  const today = useMemo(() => snapshot ? getDailyStatus(snapshot.players, snapshot.matches, snapshot.scores, localToday()) : null, [snapshot])
 
   useEffect(() => {
     if (period.preset === 'all') localStorage.removeItem(PERIOD_KEY)
@@ -75,6 +86,8 @@ export default function App() {
     setModal(null)
     setEditingPlayer(undefined)
     setEditingMatch(undefined)
+    setDetailMatch(undefined)
+    setPendingShare('')
   }, [])
 
   // Cada folha aberta vira uma entrada no historico para que o botao "voltar" do
@@ -92,13 +105,21 @@ export default function App() {
   const loadRoom = useCallback(async (roomId: string, quiet = false) => {
     try {
       const data = await repository.loadRoom(roomId)
+      // numa recarga automatica, avisa os placares que chegaram de outro aparelho
+      if (quiet) {
+        const arrivals = data.scores.filter((score) => !seenScores.current.has(score.id))
+        const names = [...new Set(arrivals.map((score) => data.players.find((player) => player.id === score.player_id)?.nickname).filter(Boolean))]
+        if (names.length === 1) showToast(`${names[0]} lançou um resultado!`)
+        else if (names.length > 1) showToast(`${names.length} resultados novos chegaram!`)
+      }
+      seenScores.current = new Set(data.scores.map((score) => score.id))
       setSnapshot(data)
       setError('')
     } catch (loadError) {
       if (!quiet) setError(readableError(loadError))
       throw loadError
     }
-  }, [])
+  }, [showToast])
 
   useEffect(() => {
     let active = true
@@ -212,6 +233,18 @@ export default function App() {
 
   const clearPeriod = useCallback(() => setPeriod({ preset: 'all' }), [])
 
+  const openMatchDetail = useCallback((match: GameMatch) => {
+    setDetailMatch(match)
+    openModal('match-detail')
+  }, [openModal])
+
+  useEffect(() => {
+    if (!pendingShare || !snapshot?.players.length) return
+    // tira o texto da URL antes de empilhar a entrada da folha no historico
+    window.history.replaceState({}, '', window.location.pathname)
+    openModal('match')
+  }, [pendingShare, snapshot?.players.length, openModal])
+
   const openNewMatch = () => {
     if (!snapshot?.players.length) {
       setView('players')
@@ -230,9 +263,9 @@ export default function App() {
     () => repository.addMatch(snapshot!.room.id, input),
     savedMessage(input.playedAt, 'Partida salva. Ranking atualizado!'),
   )
-  const importResult = (input: ImportResultInput) => mutate(
-    () => repository.importResult(snapshot!.room.id, input),
-    savedMessage(input.playedAt, 'Resultado importado com as 5 rodadas!'),
+  const importResult = (inputs: ImportResultInput[]) => mutate(
+    async () => { for (const input of inputs) await repository.importResult(snapshot!.room.id, input) },
+    savedMessage(inputs[0].playedAt, inputs.length > 1 ? `${inputs.length} resultados importados!` : 'Resultado importado com as 5 rodadas!'),
   )
   const savePlayer = (nickname: string, color: string) => mutate(
     () => editingPlayer ? repository.updatePlayer(editingPlayer, nickname, color) : repository.addPlayer(snapshot!.room.id, nickname, color),
@@ -309,15 +342,11 @@ export default function App() {
       />
 
       <main className="app-content">
-        {view === 'ranking' && <RankingView snapshot={visible!} metric={metric} onMetric={setMetric} onNewMatch={openNewMatch} filtered={!!range} onClearPeriod={clearPeriod} />}
-        {view === 'matches' && <MatchesView snapshot={visible!} onNew={openNewMatch} onEdit={(match) => { setEditingMatch(match); openModal('match-edit') }} onDelete={deleteMatch} filtered={!!range} onClearPeriod={clearPeriod} />}
+        {view === 'ranking' && <RankingView snapshot={visible!} metric={metric} onMetric={setMetric} onNewMatch={openNewMatch} filtered={!!range} onClearPeriod={clearPeriod} today={today} periodLabel={formatPeriodLabel(range)} onToast={showToast} onOpenMatch={openMatchDetail} />}
+        {view === 'matches' && <MatchesView snapshot={visible!} onNew={openNewMatch} onEdit={(match) => { setEditingMatch(match); openModal('match-edit') }} onDelete={deleteMatch} onOpen={openMatchDetail} filtered={!!range} onClearPeriod={clearPeriod} />}
         {view === 'players' && <PlayersView snapshot={visible!} onAdd={() => { setEditingPlayer(undefined); openModal('player') }} onEdit={(player) => { setEditingPlayer(player); openModal('player') }} />}
-        {view === 'insights' && <InsightsView snapshot={visible!} filtered={!!range} onClearPeriod={clearPeriod} />}
+        {view === 'insights' && <InsightsView snapshot={visible!} history={snapshot} filtered={!!range} onClearPeriod={clearPeriod} />}
       </main>
-
-      {(view === 'ranking' || view === 'matches') && snapshot.players.length > 0 && (
-        <button className="floating-action" type="button" onClick={openNewMatch}><Plus size={22} /><span>Nova partida</span></button>
-      )}
 
       <nav className="bottom-nav" aria-label="Navegação principal">
         <NavButton active={view === 'ranking'} icon={<Trophy />} label="Ranking" onClick={() => setView('ranking')} />
@@ -326,10 +355,13 @@ export default function App() {
         <NavButton active={view === 'insights'} icon={<BarChart3 />} label="Estatísticas" onClick={() => setView('insights')} />
       </nav>
 
-      {modal === 'match' && <MatchSheet players={snapshot.players} matchNumber={snapshot.matches.length + 1} busy={busy} onClose={closeModal} onSave={saveMatch} onImport={importResult} />}
+      {modal === 'match' && <MatchSheet players={snapshot.players} matchNumber={snapshot.matches.length + 1} busy={busy} initialShareText={pendingShare} onClose={closeModal} onSave={saveMatch} onImport={importResult} />}
       {modal === 'match-edit' && editingMatch && <MatchEditSheet match={editingMatch} busy={busy} onClose={closeModal} onSave={updateMatch} />}
       {modal === 'player' && <PlayerSheet player={editingPlayer} busy={busy} onClose={closeModal} onSave={savePlayer} onDelete={editingPlayer ? deletePlayer : undefined} />}
       {modal === 'share' && <ShareSheet room={snapshot.room} onClose={closeModal} onToast={showToast} />}
+      {modal === 'match-detail' && detailMatch && (
+        <MatchDetailSheet match={detailMatch} players={snapshot.players} scores={snapshot.scores} rounds={snapshot.rounds ?? []} onClose={closeModal} />
+      )}
       {modal === 'period' && <PeriodSheet period={period} onClose={closeModal} onSave={(chosen) => { setPeriod(chosen); closeModal() }} />}
       {toast && <div className="toast" role="status"><RefreshCw size={16} /> {toast}</div>}
     </div>

@@ -24,6 +24,22 @@ function decimalFromText(value: string): number {
   return Number(`${integer}.${decimal}`)
 }
 
+// varias mensagens coladas de uma vez: cada resultado compartilhado comeca com o
+// cabecalho "TimeGuessr #N", entao quebramos o texto nesses pontos. Uma mensagem
+// so continua caindo no caminho de sempre.
+export function parseTimeGuessrShares(raw: string): ParsedTimeGuessrResult[] {
+  const text = raw
+  const headers: number[] = []
+  const finder = /TimeGuessr\s*#\s*\d+/gi
+  let header = finder.exec(text)
+  while (header) {
+    headers.push(header.index)
+    header = finder.exec(text)
+  }
+  if (headers.length <= 1) return [parseTimeGuessrShare(raw)]
+  return headers.map((from, index) => parseTimeGuessrShare(text.slice(from, headers[index + 1] ?? text.length)))
+}
+
 export function parseTimeGuessrShare(raw: string): ParsedTimeGuessrResult {
   const text = raw.replace(/\uFE0F/g, '').trim()
   if (!text) throw new Error('Cole a mensagem de resultado do TimeGuessr.')

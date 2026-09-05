@@ -64,13 +64,27 @@ export function buildRanking(
   })
 }
 
-export type PlayerConsistency = {
-  player: Player
-  games: number
-  average: number
-  best: number
-  worst: number
-  deviation: number
+export type DailyStatus = {
+  matches: GameMatch[]
+  played: Array<{ player: Player; score: number }>
+  missing: Player[]
+}
+
+// quem ja lancou o resultado de um dia e quem ainda falta. usa sempre o
+// snapshot completo, nunca o recortado pelo filtro de periodo
+export function getDailyStatus(players: Player[], matches: GameMatch[], scores: Score[], day: string): DailyStatus {
+  const dayMatches = matches.filter((match) => match.played_at.slice(0, 10) === day)
+  const ids = new Set(dayMatches.map((match) => match.id))
+  const played: Array<{ player: Player; score: number }> = []
+  const missing: Player[] = []
+
+  for (const player of players) {
+    const values = scores.filter((score) => ids.has(score.match_id) && score.player_id === player.id)
+    if (values.length) played.push({ player, score: Math.max(...values.map((item) => item.score)) })
+    else missing.push(player)
+  }
+
+  return { matches: dayMatches, played: played.sort((a, b) => b.score - a.score), missing }
 }
 
 export type HeadToHead = {
@@ -85,32 +99,6 @@ export type RoundAverage = {
   roundNumber: number
   average: number
   rounds: number
-}
-
-// desvio populacional: olhamos todas as partidas jogadas, nao uma amostra delas
-export function standardDeviation(values: number[]): number {
-  if (values.length < 2) return 0
-  const mean = average(values)
-  return Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length)
-}
-
-// quem oscila menos aparece primeiro; com menos de duas partidas nao da para
-// falar em regularidade, entao o jogador fica de fora
-export function buildConsistency(players: Player[], scores: Score[]): PlayerConsistency[] {
-  return players
-    .map((player) => {
-      const values = scores.filter((score) => score.player_id === player.id).map((score) => score.score)
-      return {
-        player,
-        games: values.length,
-        average: average(values),
-        best: values.length ? Math.max(...values) : 0,
-        worst: values.length ? Math.min(...values) : 0,
-        deviation: standardDeviation(values),
-      }
-    })
-    .filter((item) => item.games >= 2)
-    .sort((a, b) => a.deviation - b.deviation || b.average - a.average)
 }
 
 // so contam as partidas em que os dois pontuaram: se um dos dois faltou, o
@@ -159,6 +147,222 @@ export function getWinnerIds(matchId: string, scores: Score[]): string[] {
   if (!matchScores.length) return []
   const highest = Math.max(...matchScores.map((score) => score.score))
   return matchScores.filter((score) => score.score === highest).map((score) => score.player_id)
+}
+
+export type MatchResult = {
+  player: Player
+  score: number
+  position: number
+  gap: number
+}
+
+export type RoundMetric = 'score' | 'year' | 'distance'
+
+export type MatchRound = {
+  roundNumber: number
+  best: Record<RoundMetric, number | null>
+  average: Record<RoundMetric, number>
+  entries: Array<{ player: Player; detail: RoundDetail | null }>
+}
+
+export type MatchSummary = {
+  results: MatchResult[]
+  rounds: MatchRound[]
+}
+
+// nos pontos, maior e melhor; no erro de ano e na distancia, menor
+export const ROUND_METRICS: Array<{ key: RoundMetric; label: string; unit: string; lowerIsBetter: boolean }> = [
+  { key: 'score', label: 'Pontos', unit: 'pts', lowerIsBetter: false },
+  { key: 'year', label: 'Ano', unit: 'anos', lowerIsBetter: true },
+  { key: 'distance', label: 'Mapa', unit: 'km', lowerIsBetter: true },
+]
+
+export function getRoundValue(detail: RoundDetail | null, metric: RoundMetric): number | null {
+  if (!detail) return null
+  if (metric === 'score') return detail.round_score
+  if (metric === 'year') return detail.year_error
+  return detail.distance_km
+}
+
+// a rodada que mais castigou a turma na metrica escolhida
+export function getHardestRound(rounds: MatchRound[], metric: RoundMetric): MatchRound | null {
+  if (rounds.length < 2) return null
+  const lowerIsBetter = ROUND_METRICS.find((item) => item.key === metric)!.lowerIsBetter
+  return [...rounds].sort((a, b) => lowerIsBetter
+    ? b.average[metric] - a.average[metric]
+    : a.average[metric] - b.average[metric])[0]
+}
+
+// Resumo de uma unica partida: o resultado com a diferenca para o vencedor e,
+// quando houver rodadas detalhadas, a leitura rodada a rodada de todos juntos.
+export function buildMatchSummary(matchId: string, players: Player[], scores: Score[], rounds: RoundDetail[]): MatchSummary {
+  const positions = getMatchPositions(matchId, scores)
+  const ordered = scores.filter((score) => score.match_id === matchId).sort((a, b) => b.score - a.score)
+  const top = ordered[0]?.score ?? 0
+
+  const results = ordered
+    .map((score) => {
+      const player = players.find((item) => item.id === score.player_id)
+      return player
+        ? { player, score: score.score, position: positions.get(player.id) ?? 1, gap: score.score - top }
+        : null
+    })
+    .filter((item): item is MatchResult => item !== null)
+
+  const roster = results.map((result) => result.player)
+  const matchRounds = rounds.filter((round) => round.match_id === matchId)
+
+  const detailed: MatchRound[] = [1, 2, 3, 4, 5].map((roundNumber) => {
+    const entries = roster.map((player) => ({
+      player,
+      detail: matchRounds.find((round) => round.round_number === roundNumber && round.player_id === player.id) ?? null,
+    }))
+    const best = {} as Record<RoundMetric, number | null>
+    const mean = {} as Record<RoundMetric, number>
+    for (const metric of ROUND_METRICS) {
+      const values = entries
+        .map((entry) => getRoundValue(entry.detail, metric.key))
+        .filter((value): value is number => value !== null)
+      best[metric.key] = values.length ? (metric.lowerIsBetter ? Math.min(...values) : Math.max(...values)) : null
+      mean[metric.key] = average(values)
+    }
+    return { roundNumber, entries, best, average: mean }
+  })
+
+  // rodadas sem nenhum placar detalhado nao entram na grade
+  return { results, rounds: detailed.filter((round) => round.entries.some((entry) => entry.detail)) }
+}
+
+// Rotulo curto de eixo. Sem isso, um acumulado de um ano vira "14.600.0k":
+// acima de um milhao a unidade precisa mudar para M. As casas decimais saem do
+// passo do eixo, para dois tiques vizinhos nunca virarem o mesmo texto.
+export function formatCompact(value: number, step = 1): string {
+  const unit = Math.abs(value) >= 1_000_000 ? 1_000_000 : Math.abs(value) >= 1000 ? 1000 : 1
+  if (unit === 1) return formatScore(value)
+  const stepInUnits = step / unit
+  const digits = Number.isInteger(stepInUnits) ? 0 : Number.isInteger(stepInUnits * 10) ? 1 : 2
+  const short = (value / unit).toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+  return `${short}${unit === 1_000_000 ? 'M' : 'k'}`
+}
+
+export type Scale = { min: number; max: number; step: number }
+
+// Escolhe um intervalo "redondo" que cubra os dados, para o eixo nao desperdicar
+// area em faixas onde ninguem pontua. Sem isso, placares entre 31k e 48k ficam
+// espremidos no terco superior de uma regua de 0 a 50k.
+export function niceScale(min: number, max: number, ticks = 5): Scale {
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return { min: 0, max: 50000, step: 10000 }
+  if (max === min) {
+    const pad = Math.abs(max) > 1 ? Math.abs(max) * 0.1 : 1
+    min -= pad
+    max += pad
+  }
+  const rawStep = (max - min) / Math.max(1, ticks - 1)
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep))
+  const step = [1, 2, 2.5, 5, 10].map((factor) => factor * magnitude).find((value) => value >= rawStep) ?? 10 * magnitude
+  return { min: Math.floor(min / step) * step, max: Math.ceil(max / step) * step, step }
+}
+
+export function buildScaleTicks(scale: Scale): number[] {
+  const values: number[] = []
+  // a tolerancia evita perder o ultimo tique por erro de ponto flutuante
+  for (let value = scale.min; value <= scale.max + scale.step / 1000; value += scale.step) {
+    values.push(Number(value.toFixed(6)))
+  }
+  return values
+}
+
+export type PlayerStreak = {
+  player: Player
+  current: number
+  longest: number
+  games: number
+}
+
+export type MonthlyChampion = {
+  month: string
+  matches: number
+  champion: PlayerRanking | null
+}
+
+// So as partidas em que o jogador pontuou contam: faltar um dia nao zera a
+// sequencia, apenas nao a aumenta. Empate no topo conta como vitoria, igual ao
+// resto do app.
+export function buildStreaks(players: Player[], matches: GameMatch[], scores: Score[]): PlayerStreak[] {
+  const ordered = [...matches].sort(compareMatchesOldest)
+  const winners = new Map(ordered.map((match) => [match.id, getWinnerIds(match.id, scores)]))
+
+  return players
+    .map((player) => {
+      let current = 0
+      let longest = 0
+      let games = 0
+      for (const match of ordered) {
+        if (!scores.some((score) => score.match_id === match.id && score.player_id === player.id)) continue
+        games += 1
+        if (winners.get(match.id)?.includes(player.id)) {
+          current += 1
+          longest = Math.max(longest, current)
+        } else {
+          current = 0
+        }
+      }
+      return { player, current, longest, games }
+    })
+    .filter((item) => item.games > 0)
+    .sort((a, b) => b.current - a.current || b.longest - a.longest || a.player.nickname.localeCompare(b.player.nickname))
+}
+
+// campeao de cada mes, do mais recente para o mais antigo
+export function buildMonthlyChampions(players: Player[], matches: GameMatch[], scores: Score[]): MonthlyChampion[] {
+  const months = new Map<string, GameMatch[]>()
+  for (const match of matches) {
+    const month = match.played_at.slice(0, 7)
+    months.set(month, [...(months.get(month) ?? []), match])
+  }
+
+  return [...months.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([month, monthMatches]) => {
+      const ids = new Set(monthMatches.map((match) => match.id))
+      const ranking = buildRanking(players, monthMatches, scores.filter((score) => ids.has(score.match_id)))
+        .filter((player) => player.games > 0)
+      return { month, matches: monthMatches.length, champion: ranking[0] ?? null }
+    })
+}
+
+// os extremos do confronto direto: quem mais te venceu e quem voce mais venceu
+export function getRivalries(duels: HeadToHead[]): { nemesis: HeadToHead | null; favourite: HeadToHead | null } {
+  const balance = (duel: HeadToHead) => duel.wins - duel.losses
+  const sorted = [...duels].sort((a, b) => balance(a) - balance(b) || b.games - a.games)
+  const nemesis = sorted[0]
+  const favourite = sorted[sorted.length - 1]
+  return {
+    nemesis: nemesis && balance(nemesis) < 0 ? nemesis : null,
+    favourite: favourite && balance(favourite) > 0 ? favourite : null,
+  }
+}
+
+export function formatMonthLabel(month: string): string {
+  const label = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(`${month}-01T12:00:00Z`))
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+export const MEDALS = ['🥇', '🥈', '🥉']
+
+// texto pronto para colar de volta no grupo do WhatsApp
+export function buildRankingShareText(roomName: string, periodLabel: string, ranking: PlayerRanking[], matchCount: number): string {
+  const lines = ranking
+    .filter((player) => player.games > 0)
+    .map((player, index) => `${MEDALS[index] ?? `${index + 1}.`} ${player.nickname} — ${formatScore(player.total)} pts · ${player.wins} vitória${player.wins === 1 ? '' : 's'}`)
+
+  return [
+    `🏆 CronoRank — ${roomName}`,
+    `${periodLabel} · ${matchCount} partida${matchCount === 1 ? '' : 's'}`,
+    '',
+    ...(lines.length ? lines : ['Ninguém pontuou ainda.']),
+  ].join('\n')
 }
 
 export function formatScore(value: number): string {
