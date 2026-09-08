@@ -75,12 +75,16 @@ export type ImportResultInput = {
   }>
 }
 
-export type RankingMetric = 'total' | 'average' | 'wins'
+export type RankingMetric = 'total' | 'average' | 'wins' | 'league'
 
 export type PlayerRanking = Player & {
   total: number
   average: number
   wins: number
+  seconds: number
+  thirds: number
+  // soma da pontuacao por colocacao (5/3/1) de cada partida
+  leaguePoints: number
   games: number
   best: number
   trend: number

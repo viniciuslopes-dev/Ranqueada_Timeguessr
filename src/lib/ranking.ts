@@ -18,6 +18,36 @@ function compareMatchSequence(a: GameMatch, b: GameMatch, oldestFirst: boolean):
 export const compareMatchesNewest = (a: GameMatch, b: GameMatch) => compareMatchSequence(a, b, false)
 export const compareMatchesOldest = (a: GameMatch, b: GameMatch) => compareMatchSequence(a, b, true)
 
+// Modo liga: cada colocacao na partida vale uma pontuacao fixa (o formato que a
+// turma usa no grupo) e o ranking e a soma dessas pontuacoes. Empate divide a
+// mesma colocacao, entao dois primeiros levam 5 cada e o proximo ja cai para o
+// terceiro lugar.
+export const LEAGUE_POINTS = [5, 3, 1]
+
+export function leaguePointsForPosition(position: number): number {
+  return LEAGUE_POINTS[position - 1] ?? 0
+}
+
+// "1º 5 pts · 2º 3 pts · 3º 1 pt · 4º+ 0", montado da propria tabela
+export const LEAGUE_RULE_LABEL = [
+  ...LEAGUE_POINTS.map((points, index) => `${index + 1}º ${points} pt${points === 1 ? '' : 's'}`),
+  `${LEAGUE_POINTS.length + 1}º+ 0`,
+].join(' · ')
+
+export const RANKING_METRICS: Array<{ key: RankingMetric; label: string; short: string; unit: string; hint: string }> = [
+  { key: 'total', label: 'Pontos', short: 'pts', unit: 'pontos', hint: 'Soma dos placares do TimeGuessr' },
+  { key: 'average', label: 'Média', short: 'pts', unit: 'por partida', hint: 'Média de pontos por partida' },
+  { key: 'wins', label: 'Vitórias', short: 'vit.', unit: 'vitórias', hint: 'Quantas partidas cada um venceu' },
+  { key: 'league', label: 'Liga', short: 'pts', unit: 'pts de liga', hint: LEAGUE_RULE_LABEL },
+]
+
+export function getRankingValue(player: PlayerRanking, metric: RankingMetric): number {
+  if (metric === 'average') return player.average
+  if (metric === 'wins') return player.wins
+  if (metric === 'league') return player.leaguePoints
+  return player.total
+}
+
 export function buildRanking(
   players: Player[],
   matches: GameMatch[],
@@ -26,10 +56,12 @@ export function buildRanking(
 ): PlayerRanking[] {
   const orderedMatches = [...matches].sort(compareMatchesNewest)
   const winningScores = new Map<string, number>()
+  const positionsByMatch = new Map<string, Map<string, number>>()
 
   for (const match of matches) {
     const values = scores.filter((score) => score.match_id === match.id).map((score) => score.score)
     if (values.length) winningScores.set(match.id, Math.max(...values))
+    positionsByMatch.set(match.id, getMatchPositions(match.id, scores))
   }
 
   const ranking = players.map((player) => {
@@ -41,12 +73,18 @@ export function buildRanking(
       .filter((score): score is number => typeof score === 'number')
     const recentAverage = average(recentScores.slice(0, 3))
     const previousAverage = average(recentScores.slice(3, 6))
+    const placements = playerScores
+      .map((score) => positionsByMatch.get(score.match_id)?.get(player.id))
+      .filter((position): position is number => typeof position === 'number')
 
     return {
       ...player,
       total,
       average: games ? Math.round(total / games) : 0,
       wins: playerScores.filter((score) => score.score === winningScores.get(score.match_id)).length,
+      seconds: placements.filter((position) => position === 2).length,
+      thirds: placements.filter((position) => position === 3).length,
+      leaguePoints: placements.reduce((sum, position) => sum + leaguePointsForPosition(position), 0),
       games,
       best: games ? Math.max(...playerScores.map((item) => item.score)) : 0,
       trend: previousAverage ? Math.round(recentAverage - previousAverage) : 0,
@@ -59,8 +97,11 @@ export function buildRanking(
   })
 
   return ranking.sort((a, b) => {
-    const primary = metric === 'total' ? b.total - a.total : metric === 'average' ? b.average - a.average : b.wins - a.wins
-    return primary || b.wins - a.wins || b.average - a.average || a.nickname.localeCompare(b.nickname)
+    const primary = getRankingValue(b, metric) - getRankingValue(a, metric)
+    // na liga, dois jogadores empatam em pontos com facilidade: o placar somado
+    // desempata antes da media
+    const leagueTiebreak = metric === 'league' ? b.total - a.total : 0
+    return primary || b.wins - a.wins || leagueTiebreak || b.average - a.average || a.nickname.localeCompare(b.nickname)
   })
 }
 
@@ -352,14 +393,16 @@ export function formatMonthLabel(month: string): string {
 export const MEDALS = ['🥇', '🥈', '🥉']
 
 // texto pronto para colar de volta no grupo do WhatsApp
-export function buildRankingShareText(roomName: string, periodLabel: string, ranking: PlayerRanking[], matchCount: number): string {
+export function buildRankingShareText(roomName: string, periodLabel: string, ranking: PlayerRanking[], matchCount: number, metric: RankingMetric = 'total'): string {
+  const descriptor = RANKING_METRICS.find((item) => item.key === metric) ?? RANKING_METRICS[0]
   const lines = ranking
     .filter((player) => player.games > 0)
-    .map((player, index) => `${MEDALS[index] ?? `${index + 1}.`} ${player.nickname} — ${formatScore(player.total)} pts · ${player.wins} vitória${player.wins === 1 ? '' : 's'}`)
+    .map((player, index) => `${MEDALS[index] ?? `${index + 1}.`} ${player.nickname} — ${formatScore(getRankingValue(player, metric))} ${descriptor.short} · ${player.wins} vitória${player.wins === 1 ? '' : 's'}`)
 
   return [
     `🏆 CronoRank — ${roomName}`,
     `${periodLabel} · ${matchCount} partida${matchCount === 1 ? '' : 's'}`,
+    ...(metric === 'league' ? [`Pontuação por colocação: ${LEAGUE_RULE_LABEL}`] : []),
     '',
     ...(lines.length ? lines : ['Ninguém pontuou ainda.']),
   ].join('\n')

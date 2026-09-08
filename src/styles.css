@@ -129,7 +129,12 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .live-pill { display: inline-flex; align-items: center; gap: 5px; color: #278069; background: #e5f7f0; border-radius: 99px; padding: 5px 9px; font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .live-pill i { width: 5px; height: 5px; border-radius: 50%; background: #2dad89; animation: pulse 1.8s infinite; }
 @keyframes pulse { 50% { box-shadow: 0 0 0 5px rgba(45, 173, 137, .12); } }
-.ranking-filter { width: 250px; margin: -50px 88px 16px auto; }
+/* o filtro sobe para a linha do titulo; a margem direita mantem distancia do
+   selo "sincronizado" que fica no canto */
+.ranking-filter { width: 320px; margin: -50px 130px 10px auto; }
+.ranking-filter button { padding: 0 3px; }
+.metric-hint { display: flex; align-items: center; justify-content: flex-end; gap: 5px; margin: 0 130px 14px auto; color: var(--muted); font-size: 11px; font-weight: 600; }
+.metric-hint svg { flex: none; }
 .podium { min-height: 202px; margin: 2px 0 14px; padding: 24px 15px 0; display: flex; align-items: flex-end; justify-content: center; gap: 7px; border-radius: 20px; background: linear-gradient(180deg, rgba(255,255,255,.56), rgba(236,232,221,.7)); border: 1px solid #e7e3d8; overflow: hidden; }
 .podium__place { width: min(29%, 160px); display: flex; flex-direction: column; align-items: center; min-width: 0; }
 .podium__place > strong { width: 100%; margin-top: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font-size: 12px; }
@@ -524,7 +529,9 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
   .leader-hero > .avatar { margin-right: 15px; }
   .leader-hero h2 { font-size: 25px; }
   .leader-hero__score { right: 17px; }
-  .ranking-filter { width: 100%; margin: 0 0 13px; }
+  .ranking-filter { width: 100%; margin: 0 0 8px; }
+  .ranking-filter button { font-size: 11px; }
+  .metric-hint { justify-content: flex-start; margin: 0 0 13px; }
   .section-heading h2 { font-size: 20px; }
   .podium { margin-left: -3px; margin-right: -3px; }
   .welcome-card { grid-template-columns: auto 1fr; padding: 17px; }
