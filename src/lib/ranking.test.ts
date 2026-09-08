@@ -187,6 +187,26 @@ describe('ranking', () => {
     expect(champions[0].matches).toBe(1)
   })
 
+  it('elege o campeao do mes pela pontuacao de colocacao, nao pelo placar somado', () => {
+    const mes: GameMatch[] = [1, 2, 3].map((day) => (
+      { id: `d${day}`, room_id: 'r', title: `Dia ${day}`, game_number: null, played_at: `2026-03-0${day}`, created_at: '' }
+    ))
+    // Ana ganha uma partida com folga (placar somado maior), Beto ganha as outras
+    // duas por pouco e leva o mes na pontuacao de colocacao
+    const placares: Score[] = [
+      { id: '1', room_id: 'r', match_id: 'd1', player_id: 'a', score: 50000, created_at: '' },
+      { id: '2', room_id: 'r', match_id: 'd1', player_id: 'b', score: 10000, created_at: '' },
+      { id: '3', room_id: 'r', match_id: 'd2', player_id: 'a', score: 9000, created_at: '' },
+      { id: '4', room_id: 'r', match_id: 'd2', player_id: 'b', score: 10000, created_at: '' },
+      { id: '5', room_id: 'r', match_id: 'd3', player_id: 'a', score: 9000, created_at: '' },
+      { id: '6', room_id: 'r', match_id: 'd3', player_id: 'b', score: 10000, created_at: '' },
+    ]
+    const [mesAtual] = buildMonthlyChampions(players, mes, placares)
+    expect(mesAtual.champion).toMatchObject({ id: 'b', leaguePoints: 13, total: 30000 })
+    // pelo placar somado o campeao seria a Ana
+    expect(buildMonthlyChampions(players, mes, placares, 'total')[0].champion?.id).toBe('a')
+  })
+
   it('destaca o algoz e o fregues no confronto direto', () => {
     const duels = [
       { opponent: players[0], games: 10, wins: 2, losses: 8, draws: 0 },

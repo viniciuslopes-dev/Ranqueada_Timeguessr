@@ -354,8 +354,10 @@ export function buildStreaks(players: Player[], matches: GameMatch[], scores: Sc
     .sort((a, b) => b.current - a.current || b.longest - a.longest || a.player.nickname.localeCompare(b.player.nickname))
 }
 
-// campeao de cada mes, do mais recente para o mais antigo
-export function buildMonthlyChampions(players: Player[], matches: GameMatch[], scores: Score[]): MonthlyChampion[] {
+// campeao de cada mes, do mais recente para o mais antigo. O titulo mensal sai
+// da pontuacao por colocacao: no mes, subir ao podio com regularidade vale mais
+// do que um placar alto isolado.
+export function buildMonthlyChampions(players: Player[], matches: GameMatch[], scores: Score[], metric: RankingMetric = 'league'): MonthlyChampion[] {
   const months = new Map<string, GameMatch[]>()
   for (const match of matches) {
     const month = match.played_at.slice(0, 7)
@@ -366,7 +368,7 @@ export function buildMonthlyChampions(players: Player[], matches: GameMatch[], s
     .sort((a, b) => b[0].localeCompare(a[0]))
     .map(([month, monthMatches]) => {
       const ids = new Set(monthMatches.map((match) => match.id))
-      const ranking = buildRanking(players, monthMatches, scores.filter((score) => ids.has(score.match_id)))
+      const ranking = buildRanking(players, monthMatches, scores.filter((score) => ids.has(score.match_id)), metric)
         .filter((player) => player.games > 0)
       return { month, matches: monthMatches.length, champion: ranking[0] ?? null }
     })
