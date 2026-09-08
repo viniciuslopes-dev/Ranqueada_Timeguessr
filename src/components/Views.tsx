@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarCheck, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, ChevronUp, Clock3, Crown, Edit3, Flame, Globe2, Info, Medal, MoveHorizontal, Plus, Share2, Sparkles, Swords, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users, X } from 'lucide-react'
 import type { GameMatch, Player, PlayerRanking, RankingMetric, RoomSnapshot, Score } from '../types'
-import { buildHeadToHead, buildMonthlyChampions, buildRanking, buildRankingShareText, buildRoundAverages, buildScaleTicks, buildStreaks, compareMatchesNewest, compareMatchesOldest, formatMonthLabel, formatScore, formatShortDate, formatCompact, getMatchPositions, getRankingValue, getRivalries, getWinnerIds, LEAGUE_RULE_LABEL, MEDALS, niceScale, RANKING_METRICS, type DailyStatus } from '../lib/ranking'
+import { buildHeadToHead, buildMonthlyChampions, buildRanking, buildRankingShareText, buildRoundAverages, buildScaleTicks, buildStreaks, compareMatchesNewest, compareMatchesOldest, formatMonthLabel, formatScore, formatShortDate, formatCompact, getMatchPositions, getRankingValue, getRivalries, getWinnerIds, leaguePointsForPosition, LEAGUE_RULE_LABEL, MEDALS, niceScale, RANKING_METRICS, type DailyStatus } from '../lib/ranking'
 import { formatDistance, formatDistanceLabel } from '../lib/distance'
 import { formatPeriodLabel, localToday, type DateRange, type Period, type PeriodPreset } from '../lib/period'
 import { EmptyState, PlayerAvatar } from './ui'
@@ -430,6 +430,11 @@ export function InsightsView({ snapshot, history, filtered, onClearPeriod }: { s
   const measured = specialties.filter((item) => item.rounds > 0)
   const timeMaster = [...measured].sort((a, b) => a.yearError! - b.yearError!)[0]
   const geoMaster = [...measured].sort((a, b) => a.distanceKm! - b.distanceKm!)[0]
+  // a liga le o mesmo periodo pela pontuacao de colocacao: quem soma mais placar
+  // nem sempre e quem mais sobe ao podio
+  const leagueTable = buildRanking(snapshot.players, snapshot.matches, snapshot.scores, 'league')
+    .filter((player) => player.games > 0)
+  const leagueLeader = leagueTable[0]
 
   return (
     <div className="view-stack">
@@ -453,6 +458,7 @@ export function InsightsView({ snapshot, history, filtered, onClearPeriod }: { s
             <EvolutionChart snapshot={snapshot} />
           </section>
           <StreaksCard snapshot={snapshot} />
+          <LeagueTable ranking={leagueTable} />
           <section>
             <div className="section-heading"><div><span className="section-kicker">PRECISÃO POR JOGADOR</span><h2>Especialidades</h2></div></div>
             {measured.length ? (
@@ -469,6 +475,7 @@ export function InsightsView({ snapshot, history, filtered, onClearPeriod }: { s
               <article className="achievement achievement--mint"><span><Target /></span><div><small>{filtered ? 'RECORDE DO PERÍODO' : 'RECORDE ETERNO'}</small><strong>{recordNames || 'Aguardando'}</strong><p>{recordHolders.length ? `${formatScore(best)} pts${recordMatch ? ` em ${recordMatch.title}` : ''}` : 'Registre um placar para abrir o recorde'}</p></div></article>
               <article className="achievement achievement--coral"><span><Clock3 /></span><div><small>MESTRE DO TEMPO</small><strong>{timeMaster?.player.nickname ?? 'Aguardando'}</strong><p>{timeMaster ? `${formatAverage(timeMaster.yearError)} anos de erro médio` : 'Importe resultados detalhados'}</p></div></article>
               <article className="achievement achievement--blue"><span><Globe2 /></span><div><small>MESTRE DO MAPA</small><strong>{geoMaster?.player.nickname ?? 'Aguardando'}</strong><p>{geoMaster ? `${formatDistanceLabel(geoMaster.distanceKm)} de distância média` : 'Importe resultados detalhados'}</p></div></article>
+              <article className="achievement achievement--violet"><span><Medal /></span><div><small>REI DA LIGA</small><strong>{leagueLeader?.nickname ?? 'Aguardando'}</strong><p>{leagueLeader ? `${formatScore(leagueLeader.leaguePoints)} pts por colocação · ${leagueLeader.wins}× 1º` : 'Registre uma partida para abrir a tabela'}</p></div></article>
             </div>
           </section>
           <ChampionsCard snapshot={history} />
@@ -636,6 +643,56 @@ function ChampionsCard({ snapshot }: { snapshot: RoomSnapshot }) {
   )
 }
 
+// Tabela no formato de liga: quantas vezes cada um subiu a cada degrau do
+// podio e quanto isso rendeu. E a leitura que o ranking por colocacao usa.
+function LeagueTable({ ranking }: { ranking: PlayerRanking[] }) {
+  if (!ranking.length) return null
+  const leader = ranking[0]
+  const runnerUp = ranking[1]
+  const lead = runnerUp ? leader.leaguePoints - runnerUp.leaguePoints : 0
+
+  return (
+    <section>
+      <div className="section-heading">
+        <div><span className="section-kicker">PONTUAÇÃO POR COLOCAÇÃO</span><h2>Tabela da liga</h2></div>
+        {!!runnerUp && (
+          <span className="league-lead">
+            {lead === 0
+              ? `${leader.nickname} e ${runnerUp.nickname} empatados`
+              : `${leader.nickname} abre ${lead} pt${lead === 1 ? '' : 's'}`}
+          </span>
+        )}
+      </div>
+      <div className="league-card">
+        <div className="league-head">
+          <span>Jogador</span>
+          <span title="Primeiros lugares">1º</span>
+          <span title="Segundos lugares">2º</span>
+          <span title="Terceiros lugares">3º</span>
+          <span>Pts</span>
+        </div>
+        {ranking.map((player, index) => {
+          const outside = player.games - player.wins - player.seconds - player.thirds
+          return (
+            <div className={`league-row ${index === 0 ? 'league-row--leader' : ''}`} key={player.id}>
+              <div>
+                <PlayerAvatar player={player} size="sm" rank={index + 1} />
+                <strong>{player.nickname}</strong>
+                <small>{player.games} jogo{player.games === 1 ? '' : 's'}{outside > 0 ? ` · ${outside} fora do pódio` : ''}</small>
+              </div>
+              <span className={player.wins ? 'league-count league-count--gold' : 'league-count'}>{player.wins}</span>
+              <span className={player.seconds ? 'league-count league-count--silver' : 'league-count'}>{player.seconds}</span>
+              <span className={player.thirds ? 'league-count league-count--bronze' : 'league-count'}>{player.thirds}</span>
+              <span className="league-points">{formatScore(player.leaguePoints)}</span>
+            </div>
+          )
+        })}
+      </div>
+      <p className="section-note">{LEAGUE_RULE_LABEL}. Empate divide a colocação: dois primeiros levam 5 pontos cada e o próximo já cai para o 3º lugar.</p>
+    </section>
+  )
+}
+
 function SpecialtyTable({ specialties }: { specialties: Specialty[] }) {
   const [sort, setSort] = useState<{ key: SpecialtyColumn; direction: 'asc' | 'desc' } | null>(null)
 
@@ -684,11 +741,12 @@ function SpecialtyTable({ specialties }: { specialties: Specialty[] }) {
   )
 }
 
-type ChartMode = 'total' | 'match' | 'position'
+type ChartMode = 'total' | 'league' | 'match' | 'position'
 
 const CHART_MODES: Array<{ key: ChartMode; label: string }> = [
   { key: 'total', label: 'Acumulado' },
-  { key: 'match', label: 'Por partida' },
+  { key: 'league', label: 'Liga' },
+  { key: 'match', label: 'Partida' },
   { key: 'position', label: 'Colocação' },
 ]
 
@@ -697,7 +755,10 @@ function EvolutionChart({ snapshot }: { snapshot: RoomSnapshot }) {
   const ordered = [...snapshot.matches].sort(compareMatchesOldest)
   const matches = ordered.slice(-8)
   const players = buildRanking(snapshot.players, snapshot.matches, snapshot.scores).slice(0, 4)
-  const positions = matches.map((match) => getMatchPositions(match.id, snapshot.scores))
+  // a colocacao de todas as partidas do periodo, nao so a da janela visivel: a
+  // corrida da liga precisa somar o que veio antes
+  const positionsByMatch = new Map(ordered.map((match) => [match.id, getMatchPositions(match.id, snapshot.scores)]))
+  const positions = matches.map((match) => positionsByMatch.get(match.id)!)
   const lastPlace = Math.max(2, ...positions.map((item) => item.size))
 
   const scoreOf = (matchId: string, playerId: string) =>
@@ -714,8 +775,19 @@ function EvolutionChart({ snapshot }: { snapshot: RoomSnapshot }) {
     return [player.id, running.slice(ordered.length - matches.length)]
   }))
 
+  const leagueTotals = new Map(players.map((player) => {
+    let sum = 0
+    const running = ordered.map((match) => {
+      const position = positionsByMatch.get(match.id)?.get(player.id)
+      sum += position ? leaguePointsForPosition(position) : 0
+      return sum
+    })
+    return [player.id, running.slice(ordered.length - matches.length)]
+  }))
+
   const valueAt = (playerId: string, index: number): number | null => {
     if (mode === 'total') return totals.get(playerId)?.[index] ?? null
+    if (mode === 'league') return leagueTotals.get(playerId)?.[index] ?? null
     if (mode === 'position') return positions[index].get(playerId) ?? null
     return scoreOf(matches[index].id, playerId)
   }
@@ -782,9 +854,11 @@ function EvolutionChart({ snapshot }: { snapshot: RoomSnapshot }) {
 
   const note = mode === 'total'
     ? 'Soma de pontos ao longo das partidas — quem sobe mais rápido está abrindo vantagem.'
-    : mode === 'match'
-      ? 'Placar de cada partida, na escala dos resultados da liga.'
-      : 'Colocação dentro de cada partida.'
+    : mode === 'league'
+      ? `Pontos de liga acumulados (${LEAGUE_RULE_LABEL}) — a corrida pelo título.`
+      : mode === 'match'
+        ? 'Placar de cada partida, na escala dos resultados da liga.'
+        : 'Colocação dentro de cada partida.'
 
   return (
     <>

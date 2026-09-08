@@ -270,6 +270,9 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .chart-legend i { width: 8px; height: 8px; border-radius: 50%; }
 .section-note { margin-top: 9px; color: var(--muted); font-size: 9px; line-height: 1.55; }
 .chart-mode { width: 100%; margin-bottom: 12px; }
+/* quatro leituras no mesmo controle: sem folga lateral o rotulo quebra em duas
+   linhas no celular */
+.chart-mode button { padding: 0 2px; white-space: nowrap; }
 
 
 .profile-picker { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 3px; margin-bottom: 11px; scrollbar-width: none; }
@@ -311,6 +314,7 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .achievement--coral > span { color: #cc4f2c; background: #ffe6de; }
 .achievement--blue > span { color: #406bdf; background: #e9efff; }
 .achievement--mint > span { color: #1c7a5e; background: #dcf3ea; }
+.achievement--violet > span { color: #6c4bd1; background: #ece5ff; }
 .achievement > div { display: grid; }
 .achievement small { color: var(--muted); font-size: 8px; font-weight: 800; letter-spacing: .09em; }
 .achievement strong { margin: 1px 0; font-family: 'Space Grotesk', sans-serif; font-size: 14px; }
@@ -405,6 +409,22 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .specialty-row > span svg { color: var(--coral-dark); }
 .specialty-row > span strong { font-family: 'Space Grotesk', sans-serif; color: var(--navy); font-size: 11px; }
 .specialty-row > span small { grid-column: 1 / -1; color: var(--muted); font-size: 7px; }
+.league-lead { flex: none; color: #6c4bd1; background: #f0ebff; border-radius: 99px; padding: 5px 10px; font-size: 9px; font-weight: 800; }
+.league-card { overflow: hidden; border: 1px solid #e6e3dc; border-radius: 19px; background: #fff; }
+.league-head, .league-row { display: grid; grid-template-columns: minmax(130px, 1.6fr) repeat(4, minmax(42px, .5fr)); align-items: center; gap: 8px; }
+.league-head { min-height: 35px; padding: 0 13px; color: #8992a3; background: #f2f0ea; font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.league-head > span:not(:first-child) { text-align: center; }
+.league-row { min-height: 56px; padding: 8px 13px; border-top: 1px solid #efede7; }
+.league-row--leader { background: linear-gradient(90deg, rgba(255, 242, 189, .45), transparent); }
+.league-row > div { min-width: 0; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 0 8px; }
+.league-row > div .avatar { grid-row: 1 / 3; }
+.league-row > div strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.league-row > div small { color: var(--muted); font-size: 8px; }
+.league-count { color: #9aa2b1; text-align: center; font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: 700; }
+.league-count--gold { color: #9a7100; }
+.league-count--silver { color: #6b7280; }
+.league-count--bronze { color: #a4623a; }
+.league-points { color: var(--navy); text-align: center; font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 700; }
 .detail-empty { min-height: 92px; padding: 16px; display: flex; align-items: center; gap: 13px; border: 1px dashed #d7d4cc; border-radius: 18px; background: rgba(255,255,255,.48); }
 .detail-empty__icon { width: 43px; height: 43px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 13px; background: #fff0eb; font-size: 20px; }
 .detail-empty strong { font-size: 11px; }.detail-empty p { margin-top: 3px; color: var(--muted); font-size: 9px; }
@@ -531,6 +551,7 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
   .leader-hero__score { right: 17px; }
   .ranking-filter { width: 100%; margin: 0 0 8px; }
   .ranking-filter button { font-size: 11px; }
+  .chart-mode button { font-size: 10px; }
   .metric-hint { justify-content: flex-start; margin: 0 0 13px; }
   .section-heading h2 { font-size: 20px; }
   .podium { margin-left: -3px; margin-right: -3px; }
@@ -556,6 +577,8 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
   .line-chart { width: 660px; min-width: 660px; }
   .chart-legend { width: 660px; }
   .specialty-head, .specialty-row { grid-template-columns: minmax(108px, 1.3fr) repeat(3, minmax(54px, .65fr)); gap: 3px; padding-left: 8px; padding-right: 8px; }
+  .league-head, .league-row { grid-template-columns: minmax(96px, 1.3fr) repeat(4, minmax(32px, .45fr)); gap: 3px; padding-left: 9px; padding-right: 9px; }
+  .league-points { font-size: 13px; }
   .specialty-row > div { gap: 0 5px; }
   .specialty-row > span { column-gap: 2px; }
   .specialty-row > span strong { font-size: 10px; }
