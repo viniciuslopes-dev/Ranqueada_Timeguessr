@@ -3,6 +3,7 @@ import { CalendarDays, Check, CheckCircle2, Clock3, Copy, Globe2, Keyboard, Clip
 import type { GameMatch, ImportResultInput, MatchInput, MatchUpdateInput, Player, Room, RoundDetail, Score } from '../types'
 import { localToday, resolvePeriod, type Period } from '../lib/period'
 import { buildMatchSummary, formatScore, formatShortDate, getHardestRound, getRoundValue, ROUND_METRICS, type MatchSummary, type RoundMetric } from '../lib/ranking'
+import { formatDistanceLabel } from '../lib/distance'
 import { parseTimeGuessrShares, type ParsedTimeGuessrResult } from '../lib/timeguessrParser'
 import { PLAYER_COLORS, PlayerAvatar, Sheet } from './ui'
 
@@ -160,7 +161,7 @@ export function MatchSheet({ players, matchNumber, busy, initialShareText, onClo
                       <b>{round.roundNumber}</b>
                       <span><Trophy size={13} /> {round.roundScore.toLocaleString('pt-BR')}</span>
                       <span><Clock3 size={13} /> {round.yearError} ano{round.yearError === 1 ? '' : 's'}</span>
-                      <span><Globe2 size={13} /> {round.distanceKm.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} km</span>
+                      <span><Globe2 size={13} /> {formatDistanceLabel(round.distanceKm)}</span>
                     </div>
                   ))}
                 </div>
@@ -395,7 +396,7 @@ export function MatchDetailSheet({ match, players, scores, rounds, onClose }: Ma
                     <PlayerAvatar player={result.player} size="sm" />
                     <strong>{result.player.nickname}</strong>
                     <span><Clock3 size={13} /> {mean(own.map((round) => round.year_error)).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} anos</span>
-                    <span><Globe2 size={13} /> {mean(own.map((round) => round.distance_km)).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} km</span>
+                    <span><Globe2 size={13} /> {formatDistanceLabel(mean(own.map((round) => round.distance_km)))}</span>
                   </div>
                 )
               })}

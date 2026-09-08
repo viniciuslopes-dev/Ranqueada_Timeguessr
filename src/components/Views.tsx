@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarCheck, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, ChevronUp, Clock3, Crown, Edit3, Flame, Globe2, MoveHorizontal, Plus, Share2, Sparkles, Swords, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users, X } from 'lucide-react'
 import type { GameMatch, Player, PlayerRanking, RankingMetric, RoomSnapshot, Score } from '../types'
 import { buildHeadToHead, buildMonthlyChampions, buildRanking, buildRankingShareText, buildRoundAverages, buildScaleTicks, buildStreaks, compareMatchesNewest, compareMatchesOldest, formatMonthLabel, formatScore, formatShortDate, formatCompact, getMatchPositions, getRivalries, getWinnerIds, MEDALS, niceScale, type DailyStatus } from '../lib/ranking'
+import { formatDistance, formatDistanceLabel } from '../lib/distance'
 import { formatPeriodLabel, localToday, type DateRange, type Period, type PeriodPreset } from '../lib/period'
 import { EmptyState, PlayerAvatar } from './ui'
 
@@ -453,7 +454,7 @@ export function InsightsView({ snapshot, history, filtered, onClearPeriod }: { s
               <article className="achievement achievement--gold"><span><Crown /></span><div><small>DONO DO TEMPO</small><strong>{champion?.nickname ?? '—'}</strong><p>Lidera o placar geral</p></div></article>
               <article className="achievement achievement--mint"><span><Target /></span><div><small>{filtered ? 'RECORDE DO PERÍODO' : 'RECORDE ETERNO'}</small><strong>{recordNames || 'Aguardando'}</strong><p>{recordHolders.length ? `${formatScore(best)} pts${recordMatch ? ` em ${recordMatch.title}` : ''}` : 'Registre um placar para abrir o recorde'}</p></div></article>
               <article className="achievement achievement--coral"><span><Clock3 /></span><div><small>MESTRE DO TEMPO</small><strong>{timeMaster?.player.nickname ?? 'Aguardando'}</strong><p>{timeMaster ? `${formatAverage(timeMaster.yearError)} anos de erro médio` : 'Importe resultados detalhados'}</p></div></article>
-              <article className="achievement achievement--blue"><span><Globe2 /></span><div><small>MESTRE DO MAPA</small><strong>{geoMaster?.player.nickname ?? 'Aguardando'}</strong><p>{geoMaster ? `${formatAverage(geoMaster.distanceKm)} km de distância média` : 'Importe resultados detalhados'}</p></div></article>
+              <article className="achievement achievement--blue"><span><Globe2 /></span><div><small>MESTRE DO MAPA</small><strong>{geoMaster?.player.nickname ?? 'Aguardando'}</strong><p>{geoMaster ? `${formatDistanceLabel(geoMaster.distanceKm)} de distância média` : 'Importe resultados detalhados'}</p></div></article>
             </div>
           </section>
           <ChampionsCard snapshot={history} />
@@ -661,7 +662,7 @@ function SpecialtyTable({ specialties }: { specialties: Specialty[] }) {
         <div className="specialty-row" key={item.player.id}>
           <div><PlayerAvatar player={item.player} size="sm" /><strong>{item.player.nickname}</strong><small>{item.rounds ? `${item.rounds} rodadas` : 'sem detalhes'}</small></div>
           <span title="Erro médio em anos"><Clock3 size={14} /><strong>{formatAverage(item.yearError)}</strong><small>anos</small></span>
-          <span title="Distância média"><Globe2 size={14} /><strong>{formatAverage(item.distanceKm)}</strong><small>km</small></span>
+          <span title="Distância média"><Globe2 size={14} /><strong>{formatDistance(item.distanceKm).value}</strong><small>{formatDistance(item.distanceKm).unit}</small></span>
           <span title="Pontuação média por rodada"><Trophy size={14} /><strong>{formatRoundAverage(item.roundScore)}</strong><small>média</small></span>
         </div>
       ))}
