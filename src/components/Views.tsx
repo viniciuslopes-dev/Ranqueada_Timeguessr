@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarCheck, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, ChevronUp, Clock3, Crown, Edit3, Flame, Globe2, MoveHorizontal, Plus, Share2, Sparkles, Swords, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarCheck, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, ChevronUp, Clock3, Crown, Edit3, Flame, Globe2, Info, Medal, MoveHorizontal, Plus, Share2, Sparkles, Swords, Target, Trash2, TrendingDown, TrendingUp, Trophy, UserPlus, Users, X } from 'lucide-react'
 import type { GameMatch, Player, PlayerRanking, RankingMetric, RoomSnapshot, Score } from '../types'
-import { buildHeadToHead, buildMonthlyChampions, buildRanking, buildRankingShareText, buildRoundAverages, buildScaleTicks, buildStreaks, compareMatchesNewest, compareMatchesOldest, formatMonthLabel, formatScore, formatShortDate, formatCompact, getMatchPositions, getRivalries, getWinnerIds, MEDALS, niceScale, type DailyStatus } from '../lib/ranking'
+import { buildHeadToHead, buildMonthlyChampions, buildRanking, buildRankingShareText, buildRoundAverages, buildScaleTicks, buildStreaks, compareMatchesNewest, compareMatchesOldest, formatMonthLabel, formatScore, formatShortDate, formatCompact, getMatchPositions, getRankingValue, getRivalries, getWinnerIds, LEAGUE_RULE_LABEL, MEDALS, niceScale, RANKING_METRICS, type DailyStatus } from '../lib/ranking'
 import { formatDistance, formatDistanceLabel } from '../lib/distance'
 import { formatPeriodLabel, localToday, type DateRange, type Period, type PeriodPreset } from '../lib/period'
 import { EmptyState, PlayerAvatar } from './ui'
@@ -160,13 +160,14 @@ type RankingProps = {
 export function RankingView({ snapshot, metric, onMetric, onNewMatch, filtered, onClearPeriod, today, periodLabel, onToast, onOpenMatch }: RankingProps) {
   const ranking = buildRanking(snapshot.players, snapshot.matches, snapshot.scores, metric)
   const leader = ranking[0]
+  const descriptor = RANKING_METRICS.find((item) => item.key === metric) ?? RANKING_METRICS[0]
 
   if (!snapshot.players.length) {
     return <EmptyState title="O pódio está esperando" text="Cadastre os nicks da turma para começar a liga." icon={<Users size={28} />} />
   }
 
   const shareRanking = async () => {
-    const text = buildRankingShareText(snapshot.room.name, periodLabel, ranking, snapshot.matches.length)
+    const text = buildRankingShareText(snapshot.room.name, periodLabel, ranking, snapshot.matches.length, metric)
     try {
       if (navigator.share) await navigator.share({ title: snapshot.room.name, text })
       else { await navigator.clipboard.writeText(text); onToast('Ranking copiado! É só colar no grupo.') }
@@ -200,7 +201,7 @@ export function RankingView({ snapshot, metric, onMetric, onNewMatch, filtered, 
             <p>{leader.wins} vitória{leader.wins === 1 ? '' : 's'} · média de {formatScore(leader.average)}</p>
           </div>
           <PlayerAvatar player={leader} size="xl" rank={1} />
-          <span className="leader-hero__score">{formatScore(metric === 'total' ? leader.total : metric === 'average' ? leader.average : leader.wins)}<small>{metric === 'wins' ? ' vitórias' : ' pts'}</small></span>
+          <span className="leader-hero__score">{formatScore(getRankingValue(leader, metric))}<small>{metric === 'wins' ? ' vitórias' : ' pts'}</small></span>
         </section>
       )}
 
@@ -210,10 +211,21 @@ export function RankingView({ snapshot, metric, onMetric, onNewMatch, filtered, 
           <span className="live-pill"><i /> sincronizado</span>
         </div>
         <div className="segmented ranking-filter" role="tablist" aria-label="Critério do ranking">
-          <button type="button" className={metric === 'total' ? 'active' : ''} onClick={() => onMetric('total')}>Pontos</button>
-          <button type="button" className={metric === 'average' ? 'active' : ''} onClick={() => onMetric('average')}>Média</button>
-          <button type="button" className={metric === 'wins' ? 'active' : ''} onClick={() => onMetric('wins')}>Vitórias</button>
+          {RANKING_METRICS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              role="tab"
+              aria-selected={metric === item.key}
+              title={item.hint}
+              className={metric === item.key ? 'active' : ''}
+              onClick={() => onMetric(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
+        <p className="metric-hint">{metric === 'league' ? <Medal size={13} /> : <Info size={13} />} {metric === 'league' ? `Pontos por colocação na partida: ${LEAGUE_RULE_LABEL}` : descriptor.hint}</p>
 
         {snapshot.matches.length > 0 && <Podium ranking={ranking} metric={metric} />}
         <div className="ranking-list">
@@ -223,11 +235,13 @@ export function RankingView({ snapshot, metric, onMetric, onNewMatch, filtered, 
               <PlayerAvatar player={player} size="md" rank={index + 1} />
               <div className="rank-row__identity">
                 <strong>{player.nickname}</strong>
-                <span>{player.games} jogo{player.games === 1 ? '' : 's'} · {player.wins} vitória{player.wins === 1 ? '' : 's'}</span>
+                <span>{metric === 'league'
+                  ? `${player.games} jogo${player.games === 1 ? '' : 's'} · ${player.wins}× 1º · ${player.seconds}× 2º · ${player.thirds}× 3º`
+                  : `${player.games} jogo${player.games === 1 ? '' : 's'} · ${player.wins} vitória${player.wins === 1 ? '' : 's'}`}</span>
               </div>
               <div className="rank-row__value">
-                <strong>{formatScore(metric === 'total' ? player.total : metric === 'average' ? player.average : player.wins)}</strong>
-                <span>{metric === 'wins' ? 'vitórias' : 'pontos'}</span>
+                <strong>{formatScore(getRankingValue(player, metric))}</strong>
+                <span>{descriptor.unit}</span>
               </div>
               {player.trend !== 0 && (
                 <span className={`trend ${player.trend > 0 ? 'trend--up' : 'trend--down'}`} title="Comparação das últimas partidas">
@@ -256,12 +270,12 @@ function Podium({ ranking, metric }: { ranking: PlayerRanking[]; metric: Ranking
     <div className={`podium podium--${top.length}`}>
       {displayOrder.map((player) => {
         const actualRank = ranking.findIndex((item) => item.id === player.id) + 1
-        const value = metric === 'total' ? player.total : metric === 'average' ? player.average : player.wins
+        const value = getRankingValue(player, metric)
         return (
           <div className={`podium__place podium__place--${actualRank}`} key={player.id}>
             <PlayerAvatar player={player} size={actualRank === 1 ? 'xl' : 'lg'} rank={actualRank} />
             <strong>{player.nickname}</strong>
-            <span>{formatScore(value)} {metric === 'wins' ? 'vit.' : 'pts'}</span>
+            <span>{formatScore(value)} {RANKING_METRICS.find((item) => item.key === metric)?.short ?? 'pts'}</span>
             <div>{actualRank}</div>
           </div>
         )

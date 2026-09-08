@@ -11,6 +11,7 @@ import type { GameMatch, ImportResultInput, MatchInput, MatchUpdateInput, Player
 
 const ACTIVE_ROOM_KEY = 'cronorank:active-room'
 const PERIOD_KEY = 'cronorank:period'
+const METRIC_KEY = 'cronorank:metric'
 type ViewName = 'ranking' | 'matches' | 'players' | 'insights'
 type ModalName = 'match' | 'match-edit' | 'match-detail' | 'period' | 'player' | 'share' | null
 
@@ -30,6 +31,13 @@ function readStoredPeriod(): Period {
     if (saved.preset === 'today' || saved.preset === 'week' || saved.preset === 'month') return { preset: saved.preset }
   } catch { /* preferencia corrompida volta para o padrao */ }
   return { preset: 'all' }
+}
+
+// o criterio do ranking fica salvo: quem joga no modo liga nao quer reescolher
+// a cada abertura do app
+function readStoredMetric(): RankingMetric {
+  const saved = localStorage.getItem(METRIC_KEY)
+  return saved === 'average' || saved === 'wins' || saved === 'league' ? saved : 'total'
 }
 
 function readableError(error: unknown): string {
@@ -53,7 +61,7 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<RoomSnapshot | null>(null)
   const [activeRoomId, setActiveRoomId] = useState(() => localStorage.getItem(ACTIVE_ROOM_KEY))
   const [view, setView] = useState<ViewName>('ranking')
-  const [metric, setMetric] = useState<RankingMetric>('total')
+  const [metric, setMetric] = useState<RankingMetric>(readStoredMetric)
   const [modal, setModal] = useState<ModalName>(null)
   const [editingPlayer, setEditingPlayer] = useState<Player | undefined>()
   const [editingMatch, setEditingMatch] = useState<GameMatch | undefined>()
@@ -81,6 +89,10 @@ export default function App() {
     if (period.preset === 'all') localStorage.removeItem(PERIOD_KEY)
     else localStorage.setItem(PERIOD_KEY, JSON.stringify(period))
   }, [period])
+
+  useEffect(() => {
+    localStorage.setItem(METRIC_KEY, metric)
+  }, [metric])
 
   const clearModal = useCallback(() => {
     setModal(null)

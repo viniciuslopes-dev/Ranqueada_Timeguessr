@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildMatchSummary, buildScaleTicks, formatCompact, getHardestRound, niceScale, buildMonthlyChampions, buildRankingShareText, buildStreaks, formatMonthLabel, getRivalries, buildHeadToHead, buildRanking, buildRoundAverages, getDailyStatus, compareMatchesNewest, compareMatchesOldest, formatScore, getMatchPositions, getWinnerIds } from './ranking'
+import { LEAGUE_RULE_LABEL, getRankingValue, leaguePointsForPosition, buildMatchSummary, buildScaleTicks, formatCompact, getHardestRound, niceScale, buildMonthlyChampions, buildRankingShareText, buildStreaks, formatMonthLabel, getRivalries, buildHeadToHead, buildRanking, buildRoundAverages, getDailyStatus, compareMatchesNewest, compareMatchesOldest, formatScore, getMatchPositions, getWinnerIds } from './ranking'
 import type { GameMatch, Player, RoundDetail, Score } from '../types'
 
 const players: Player[] = [
@@ -28,6 +28,44 @@ describe('ranking', () => {
     const extra = scores.filter((item) => item.player_id === 'a' && item.match_id === 'm1')
     expect(buildRanking(players, matches, extra, 'average')[0].id).toBe('a')
     expect(buildRanking(players, matches, scores, 'wins')).toHaveLength(2)
+  })
+
+  it('soma a pontuacao por colocacao no modo liga', () => {
+    // Beto vence a m1 (5) e fica em 2o na m2 (3); Ana faz o inverso
+    const result = buildRanking(players, matches, scores, 'league')
+    expect(result.map((player) => [player.id, player.leaguePoints])).toEqual([['a', 8], ['b', 8]])
+    expect(result[0]).toMatchObject({ wins: 1, seconds: 1, thirds: 0 })
+    expect(getRankingValue(result[0], 'league')).toBe(8)
+  })
+
+  it('da a mesma pontuacao para quem empata e pula a colocacao seguinte', () => {
+    const trio: Player[] = [...players, { id: 'c', room_id: 'r', nickname: 'Caio', color: '#0f0', created_at: '' }]
+    // Ana e Beto empatam em 1o (5 cada) e Caio cai para o 3o lugar (1)
+    const tied: Score[] = [
+      { id: '1', room_id: 'r', match_id: 'm1', player_id: 'a', score: 42000, created_at: '' },
+      { id: '2', room_id: 'r', match_id: 'm1', player_id: 'b', score: 42000, created_at: '' },
+      { id: '3', room_id: 'r', match_id: 'm1', player_id: 'c', score: 10000, created_at: '' },
+    ]
+    const result = buildRanking(trio, [matches[0]], tied, 'league')
+    expect(result.map((player) => [player.id, player.leaguePoints])).toEqual([['a', 5], ['b', 5], ['c', 1]])
+    expect(result[2]).toMatchObject({ wins: 0, seconds: 0, thirds: 1 })
+  })
+
+  it('nao pontua do 4o lugar em diante', () => {
+    expect([1, 2, 3, 4, 9].map(leaguePointsForPosition)).toEqual([5, 3, 1, 0, 0])
+    expect(LEAGUE_RULE_LABEL).toBe('1º 5 pts · 2º 3 pts · 3º 1 pt · 4º+ 0')
+  })
+
+  it('ordena a liga pelos pontos de colocacao, nao pelo placar somado', () => {
+    // Ana soma muito mais pontos no TimeGuessr, mas perde as duas partidas
+    const lopsided: Score[] = [
+      { id: '1', room_id: 'r', match_id: 'm1', player_id: 'a', score: 49000, created_at: '' },
+      { id: '2', room_id: 'r', match_id: 'm1', player_id: 'b', score: 49500, created_at: '' },
+      { id: '3', room_id: 'r', match_id: 'm2', player_id: 'a', score: 10000, created_at: '' },
+      { id: '4', room_id: 'r', match_id: 'm2', player_id: 'b', score: 10500, created_at: '' },
+    ]
+    expect(buildRanking(players, matches, lopsided, 'league').map((player) => player.id)).toEqual(['b', 'a'])
+    expect(buildRanking(players, matches, lopsided, 'total').map((player) => player.id)).toEqual(['b', 'a'])
   })
 
   it('trata empates como vitória para ambos', () => {
@@ -102,6 +140,11 @@ describe('ranking', () => {
     expect(text).toContain('CronoRank — Liga dos Crononautas')
     expect(text).toContain('Semana · 1–7 set · 2 partidas')
     expect(text).toContain('🥇 Ana — 85.000 pts · 1 vitória')
+
+    // no modo liga o texto leva a pontuacao por colocacao e explica a regra
+    const league = buildRankingShareText('Liga', 'Tudo', buildRanking(players, matches, scores, 'league'), 2, 'league')
+    expect(league).toContain('Pontuação por colocação: 1º 5 pts · 2º 3 pts · 3º 1 pt · 4º+ 0')
+    expect(league).toContain('🥇 Ana — 8 pts · 1 vitória')
     // quem nao pontuou no periodo fica de fora da lista
     expect(buildRankingShareText('Liga', 'Tudo', buildRanking(players, matches, []), 0)).toContain('Ninguém pontuou ainda.')
   })
