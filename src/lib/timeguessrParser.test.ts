@@ -68,6 +68,19 @@ describe('parseTimeGuessrShare', () => {
     expect(result.rounds[1].distanceKm).toBe(1.5)
   })
 
+  it('converte distâncias em milhas e pés para km', () => {
+    const result = parseTimeGuessrShare(`TimeGuessr #1195 — 32,665/50,000
+1️⃣ 🏆6.838 · 📅 13y · 🌍 9.6mi
+2️⃣ 🏆3.609 · 📅 13y · 🌍 1660.5mi
+3️⃣ 🏆9.479 · 📅 3y · 🌍 3.3mi
+4️⃣ 🏆6.634 · 📅 1y · 🌍 1520.4mi
+5️⃣ 🏆6.105 · 📅 13y · 🌍 245.5ft
+https://timeguessr.com`)
+    expect(result.gameNumber).toBe(1195)
+    expect(result.totalScore).toBe(32665)
+    expect(result.rounds.map((round) => round.distanceKm)).toEqual([15.45, 2672.316, 5.311, 2446.847, 0.075])
+  })
+
   it('explica quando a mensagem está incompleta', () => {
     expect(() => parseTimeGuessrShare(whatsappExample.split('\n').slice(0, 5).join('\n'))).toThrow(/cinco rodadas/i)
   })

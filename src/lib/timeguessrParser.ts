@@ -24,6 +24,20 @@ function decimalFromText(value: string): number {
   return Number(`${integer}.${decimal}`)
 }
 
+// o TimeGuessr mostra a distancia na unidade escolhida pelo jogador: km/m no
+// sistema metrico e mi/ft no imperial. Guardamos tudo em km.
+const KM_PER_UNIT: Record<string, number> = { km: 1, m: 0.001, mi: 1.609344, ft: 0.0003048 }
+
+function kmFromDistance(value: number, rawUnit: string): number {
+  const lower = rawUnit.toLowerCase()
+  const unit = lower.startsWith('mi') ? 'mi' : lower.startsWith('f') || lower.startsWith('p') ? 'ft' : lower
+  const factor = KM_PER_UNIT[unit] ?? 1
+  if (factor === 1) return value
+  // distance_km e numeric(12, 3) no banco: arredondamos aqui para o valor exibido
+  // ser o mesmo que foi gravado.
+  return Math.round(value * factor * 1000) / 1000
+}
+
 // varias mensagens coladas de uma vez: cada resultado compartilhado comeca com o
 // cabecalho "TimeGuessr #N", entao quebramos o texto nesses pontos. Uma mensagem
 // so continua caindo no caminho de sempre.
@@ -50,7 +64,7 @@ export function parseTimeGuessrShare(raw: string): ParsedTimeGuessrResult {
   const gameNumber = Number(header[1])
   const totalScore = scoreFromText(header[2])
   const rounds: ParsedTimeGuessrRound[] = []
-  const roundPattern = /([1-5])(?:\u20E3)?\s*🏆\s*([\d.,\s]+?)\s*(?:·|•|-)+\s*📅\s*([\d.,]+)\s*(?:y|anos?)\s*(?:·|•|-)+\s*[🌍🌎]\s*([\d.,]+)\s*(km|m)\b/iu
+  const roundPattern = /([1-5])(?:\u20E3)?\s*🏆\s*([\d.,\s]+?)\s*(?:·|•|-)+\s*📅\s*([\d.,]+)\s*(?:y|anos?)\s*(?:·|•|-)+\s*[🌍🌎]\s*([\d.,]+)\s*(km|mi(?:les?)?|m|ft|feet|pés|pes)\b/iu
 
   for (const line of text.split(/\r?\n/)) {
     const match = line.match(roundPattern)
@@ -58,8 +72,7 @@ export function parseTimeGuessrShare(raw: string): ParsedTimeGuessrResult {
     const roundNumber = Number(match[1])
     const roundScore = scoreFromText(match[2])
     const yearError = decimalFromText(match[3])
-    let distanceKm = decimalFromText(match[4])
-    if (match[5].toLowerCase() === 'm') distanceKm /= 1000
+    const distanceKm = kmFromDistance(decimalFromText(match[4]), match[5])
     rounds.push({ roundNumber, roundScore, yearError, distanceKm })
   }
 
