@@ -632,13 +632,13 @@ function ChampionsCard({ snapshot }: { snapshot: RoomSnapshot }) {
             <PlayerAvatar player={item.champion!} size="sm" />
             <div className="champion-name">
               <strong>{item.champion!.nickname}</strong>
-              <small>{formatScore(item.champion!.total)} pts · {item.champion!.wins} vitória{item.champion!.wins === 1 ? '' : 's'}</small>
+              <small>{formatScore(item.champion!.leaguePoints)} pts de liga · {item.champion!.wins}× 1º</small>
             </div>
             <span className="champion-medal">🏆</span>
           </article>
         ))}
       </div>
-      <p className="section-note">O histórico ignora o filtro de período — ele é a memória da liga inteira.</p>
+      <p className="section-note">Campeão do mês pela pontuação por colocação ({LEAGUE_RULE_LABEL}). O histórico ignora o filtro de período — ele é a memória da liga inteira.</p>
     </section>
   )
 }
