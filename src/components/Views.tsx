@@ -4,7 +4,7 @@ import type { GameMatch, Player, PlayerRanking, RankingMetric, RoomSnapshot, Sco
 import { buildHeadToHead, buildMonthlyChampions, buildRanking, buildRankingShareText, buildRoundAverages, buildScaleTicks, buildStreaks, compareMatchesNewest, compareMatchesOldest, formatMonthLabel, formatScore, formatShortDate, formatCompact, getMatchPositions, getRankingValue, getRivalries, getWinnerIds, leaguePointsForPosition, LEAGUE_RULE_LABEL, MEDALS, niceScale, RANKING_METRICS, type DailyStatus } from '../lib/ranking'
 import { formatDistance, formatDistanceLabel } from '../lib/distance'
 import { formatPeriodLabel, localToday, type DateRange, type Period, type PeriodPreset } from '../lib/period'
-import { EmptyState, PlayerAvatar } from './ui'
+import { DailyLink, EmptyState, PlayerAvatar } from './ui'
 
 type Specialty = {
   player: PlayerRanking
@@ -91,6 +91,7 @@ function TodayCard({ today, onNewMatch }: { today: DailyStatus; onNewMatch: () =
           <strong>{summary}</strong>
           <ChevronDown size={16} />
         </button>
+        <DailyLink variant="icon" label="Jogar a daily de hoje" />
         <button className="today-strip__add" type="button" onClick={onNewMatch} aria-label="Lançar resultado"><Plus size={16} /></button>
       </section>
     )
@@ -133,13 +134,16 @@ function TodayCard({ today, onNewMatch }: { today: DailyStatus; onNewMatch: () =
         </div>
       )}
 
-      <button
-        className={`primary-button ${complete ? 'today-card__cta--quiet' : ''}`}
-        type="button"
-        onClick={onNewMatch}
-      >
-        <Plus size={17} /> {complete ? 'Lançar outra partida' : 'Lançar resultado'}
-      </button>
+      <div className="today-card__actions">
+        <DailyLink variant="button" label="Jogar a daily de hoje" />
+        <button
+          className={`primary-button ${complete ? 'today-card__cta--quiet' : ''}`}
+          type="button"
+          onClick={onNewMatch}
+        >
+          <Plus size={17} /> {complete ? 'Lançar outra partida' : 'Lançar resultado'}
+        </button>
+      </div>
     </section>
   )
 }

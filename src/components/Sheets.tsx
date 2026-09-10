@@ -5,7 +5,7 @@ import { localToday, resolvePeriod, type Period } from '../lib/period'
 import { buildMatchSummary, formatScore, formatShortDate, getHardestRound, getRoundValue, ROUND_METRICS, type MatchSummary, type RoundMetric } from '../lib/ranking'
 import { formatDistanceLabel } from '../lib/distance'
 import { parseTimeGuessrShares, type ParsedTimeGuessrResult } from '../lib/timeguessrParser'
-import { PLAYER_COLORS, PlayerAvatar, Sheet } from './ui'
+import { DailyLink, PLAYER_COLORS, PlayerAvatar, Sheet } from './ui'
 
 type MatchSheetProps = {
   players: Player[]
@@ -95,6 +95,8 @@ export function MatchSheet({ players, matchNumber, busy, initialShareText, onClo
         <button className={mode === 'paste' ? 'active' : ''} type="button" onClick={() => { setMode('paste'); setError('') }}><ClipboardPaste size={17} /> Colar resultado</button>
         <button className={mode === 'manual' ? 'active' : ''} type="button" onClick={() => { setMode('manual'); setError('') }}><Keyboard size={17} /> Digitar placares</button>
       </div>
+
+      <p className="daily-hint">Ainda não jogou? <DailyLink variant="quiet" label="Abrir a daily de hoje" /></p>
 
       {mode === 'paste' ? (
         <form className="sheet-form" onSubmit={submitImport}>

@@ -192,6 +192,17 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .today-chip b { font-family: 'Space Grotesk', sans-serif; color: #24765f; font-size: 10px; }
 .today-card .primary-button { justify-self: start; }
 .today-card .today-card__cta--quiet { border: 1px solid #dcd9d2; color: #4d576b; background: #fff; box-shadow: none; }
+.today-card__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.daily-link { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; text-decoration: none; cursor: pointer; }
+.daily-link--button { min-height: 44px; padding: 0 15px; border: 1px solid #c9d7ff; border-radius: 14px; color: #365fc5; background: #eef3ff; font-size: 11px; font-weight: 800; }
+.daily-link--button:hover { border-color: #a8bffb; background: #e4ecff; }
+.daily-link--button:active { transform: translateY(1px); }
+.daily-link--icon { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #c9d7ff; border-radius: 11px; color: #365fc5; background: #fff; }
+.daily-link--icon:hover { background: #eef3ff; }
+.daily-link--quiet { color: #365fc5; font-size: 11px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
+.daily-link--quiet:hover { color: var(--coral-dark); }
+.daily-link__out { flex: 0 0 auto; opacity: .7; }
+.daily-hint { margin: -2px 0 3px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 700; }
 .share-ranking { width: 100%; min-height: 44px; margin-top: 13px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid #dcd9d2; border-radius: 14px; color: #4d576b; background: #fff; font-size: 11px; font-weight: 800; cursor: pointer; }
 .share-ranking:hover { border-color: #b9c6e8; color: #365fc5; background: #f4f7ff; }
 .recent-list button { width: 100%; min-height: 65px; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 11px; padding: 9px 12px; background: #fff; border: 1px solid #e8e5dd; border-radius: 16px; }
@@ -557,6 +568,7 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
   .podium { margin-left: -3px; margin-right: -3px; }
   .welcome-card { grid-template-columns: auto 1fr; padding: 17px; }
   .welcome-card .primary-button { grid-column: 1 / -1; }
+  .today-card__actions > * { flex: 1 1 100%; justify-content: center; }
   .field-grid { grid-template-columns: 1fr; }
   .field--date { width: 100%; }
   .stat-grid article { padding: 10px; min-width: 0; }
