@@ -84,6 +84,10 @@ O `netlify.toml` já define `npm run build`, a pasta `dist`, a pasta de Function
 
 O app consulta atualizações da sala a cada sete segundos enquanto está visível e atualiza imediatamente depois de uma alteração. Se o Neon estiver inativo, a primeira consulta pode demorar alguns segundos enquanto o compute é reativado.
 
+## Jogar a daily do dia
+
+O quadro **Hoje**, no topo do ranking, traz o botão **Jogar a daily de hoje**, que abre <https://timeguessr.com/play?mode=daily> em outra aba — o CronoRank continua aberto com o ranking do jeito que estava. Com o quadro recolhido, o mesmo atalho vira o botão de globo ao lado do `+`, e a folha **Nova partida** repete o link em “Ainda não jogou?”.
+
 ## Importar resultado do WhatsApp
 
 1. No TimeGuessr, compartilhe o resultado no grupo.

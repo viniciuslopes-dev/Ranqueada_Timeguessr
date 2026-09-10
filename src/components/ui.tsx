@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { Trophy } from 'lucide-react'
+import { ExternalLink, Globe2, Trophy } from 'lucide-react'
+import { TIMEGUESSR_DAILY_URL } from '../lib/timeguessr'
 import type { Player } from '../types'
 
 export const PLAYER_COLORS = ['#ff7043', '#4f7cff', '#8b5cf6', '#23a982', '#e8a317', '#e75480', '#197f91', '#6f7d3c']
@@ -10,6 +11,20 @@ export function Brand({ compact = false }: { compact?: boolean }) {
       <img src="/brand-mark.svg" alt="" />
       <span>CronoRank</span>
     </div>
+  )
+}
+
+// Atalho para a partida do dia no TimeGuessr. Abre sempre em outra aba para
+// que o app instalado continue aberto com o ranking do jeito que estava.
+export function DailyLink({ variant = 'button', label = 'Jogar a daily de hoje' }: { variant?: 'button' | 'quiet' | 'icon'; label?: string }) {
+  const target = { href: TIMEGUESSR_DAILY_URL, target: '_blank', rel: 'noopener noreferrer' }
+  if (variant === 'icon') {
+    return <a className="daily-link daily-link--icon" {...target} title={label} aria-label={label}><Globe2 size={17} /></a>
+  }
+  return (
+    <a className={`daily-link daily-link--${variant}`} {...target}>
+      <Globe2 size={15} /> {label} <ExternalLink className="daily-link__out" size={13} />
+    </a>
   )
 }
 
