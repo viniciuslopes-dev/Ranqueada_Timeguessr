@@ -132,7 +132,7 @@ export function MatchSheet({ players, matchNumber, busy, initialShareText, onClo
                     <span><CheckCircle2 size={15} /> Jogo #{result.gameNumber}</span>
                     <strong>{result.totalScore.toLocaleString('pt-BR')} pts</strong>
                   </header>
-                  <div className="profile-picker" role="radiogroup" aria-label={`Jogador do resultado de ${result.totalScore} pontos`}>
+                  <div className="import-player-list" role="radiogroup" aria-label={`Jogador do resultado de ${result.totalScore} pontos`}>
                     {players.map((player) => (
                       <button
                         className={assignments[index] === player.id ? 'active' : ''}
@@ -140,10 +140,12 @@ export function MatchSheet({ players, matchNumber, busy, initialShareText, onClo
                         role="radio"
                         aria-checked={assignments[index] === player.id}
                         key={player.id}
+                        title={player.nickname}
                         onClick={() => assign(index, player.id)}
                       >
                         <PlayerAvatar player={player} size="sm" />
                         <span>{player.nickname}</span>
+                        <i>{assignments[index] === player.id && <Check size={12} />}</i>
                       </button>
                     ))}
                   </div>
@@ -179,6 +181,7 @@ export function MatchSheet({ players, matchNumber, busy, initialShareText, onClo
                       role="radio"
                       aria-checked={assignments[0] === player.id}
                       key={player.id}
+                      title={player.nickname}
                       onClick={() => assign(0, player.id)}
                     >
                       <PlayerAvatar player={player} size="sm" />
