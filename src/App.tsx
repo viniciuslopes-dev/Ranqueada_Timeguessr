@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, Download, Gamepad2, Home, LogOut, RefreshCw, Share2, Trophy, Users } from 'lucide-react'
-import { Onboarding } from './components/Onboarding'
+import { BarChart3, CloudOff, Download, Gamepad2, RefreshCw, Share2, Trophy, Users } from 'lucide-react'
+import { Onboarding, Reconnect } from './components/Onboarding'
 import { MatchDetailSheet, MatchEditSheet, MatchSheet, PeriodSheet, PlayerSheet, ShareSheet } from './components/Sheets'
 import { InsightsView, MatchesView, PeriodBar, PlayersView, RankingView } from './components/Views'
 import { getDailyStatus } from './lib/ranking'
 import { Brand, Spinner } from './components/ui'
 import { filterSnapshotByPeriod, formatPeriodLabel, isWithinRange, localToday, resolvePeriod, type Period, type PeriodPreset } from './lib/period'
 import { repository } from './lib/neonRepository'
+import { isAccessRevoked, isTemporaryFailure } from './lib/api'
+import { clearActiveRoom, describeSavedAt, forgetRoom, readActiveRoomId, saveActiveRoomId } from './lib/roomAccess'
 import type { GameMatch, ImportResultInput, MatchInput, MatchUpdateInput, Player, RankingMetric, RoomSnapshot } from './types'
 
-const ACTIVE_ROOM_KEY = 'cronorank:active-room'
 const PERIOD_KEY = 'cronorank:period'
 const METRIC_KEY = 'cronorank:metric'
 type ViewName = 'ranking' | 'matches' | 'players' | 'insights'
@@ -42,6 +43,7 @@ function readStoredMetric(): RankingMetric {
 
 function readableError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
+  if (/sem internet/i.test(message)) return message
   if (/duplicate|unique/i.test(message)) return 'Esse nick já está na liga. Escolha outro.'
   if (/not found|não encontr|P0002/i.test(message)) return 'Não encontramos essa liga. Confira o código.'
   if (/row-level|policy|permission/i.test(message)) return 'Seu acesso à liga expirou. Entre novamente pelo código.'
@@ -59,7 +61,9 @@ export default function App() {
   }, [])
   const [pendingShare, setPendingShare] = useState(sharedResult)
   const [snapshot, setSnapshot] = useState<RoomSnapshot | null>(null)
-  const [activeRoomId, setActiveRoomId] = useState(() => localStorage.getItem(ACTIVE_ROOM_KEY))
+  const [activeRoomId, setActiveRoomId] = useState(readActiveRoomId)
+  // quando preenchido, a tela mostra a copia salva no aparelho em vez dos dados vivos
+  const [cachedAt, setCachedAt] = useState<string | null>(null)
   const [view, setView] = useState<ViewName>('ranking')
   const [metric, setMetric] = useState<RankingMetric>(readStoredMetric)
   const [modal, setModal] = useState<ModalName>(null)
@@ -126,12 +130,50 @@ export default function App() {
       }
       seenScores.current = new Set(data.scores.map((score) => score.id))
       setSnapshot(data)
+      setCachedAt(null)
       setError('')
     } catch (loadError) {
       if (!quiet) setError(readableError(loadError))
       throw loadError
     }
   }, [showToast])
+
+  // Sai da liga de verdade: apaga token e copia local. So acontece quando o
+  // servidor recusa o acesso ou quando o usuario pede para sair.
+  const forgetAccess = useCallback((roomId: string | null) => {
+    if (roomId) forgetRoom(roomId)
+    else clearActiveRoom()
+    setActiveRoomId(null)
+    setSnapshot(null)
+    setCachedAt(null)
+    setView('ranking')
+  }, [])
+
+  // Abertura sem internet: em vez de pedir o codigo de novo, mostra o ultimo
+  // ranking sincronizado e segue tentando reconectar em segundo plano.
+  const showCachedRoom = useCallback((roomId: string) => {
+    const cached = repository.readCachedRoom(roomId)
+    if (!cached) return false
+    seenScores.current = new Set(cached.snapshot.scores.map((score) => score.id))
+    setSnapshot(cached.snapshot)
+    setCachedAt(cached.savedAt)
+    setError('')
+    return true
+  }, [])
+
+  const reconnect = useCallback(async () => {
+    if (!activeRoomId) return
+    setBusy(true)
+    try {
+      await loadRoom(activeRoomId)
+    } catch (retryError) {
+      if (isTemporaryFailure(retryError)) return
+      forgetAccess(activeRoomId)
+      setError(readableError(retryError))
+    } finally {
+      setBusy(false)
+    }
+  }, [activeRoomId, loadRoom, forgetAccess])
 
   useEffect(() => {
     let active = true
@@ -140,10 +182,12 @@ export default function App() {
         await repository.initialize()
         if (activeRoomId) await loadRoom(activeRoomId)
       } catch (bootError) {
-        localStorage.removeItem(ACTIVE_ROOM_KEY)
-        if (active) {
-          setActiveRoomId(null)
-          setSnapshot(null)
+        if (!active) return
+        // falha temporaria nunca custa o acesso: o token continua guardado, a
+        // tela mostra o ultimo ranking salvo e o app volta sozinho depois
+        if (activeRoomId && isTemporaryFailure(bootError)) showCachedRoom(activeRoomId)
+        else {
+          forgetAccess(activeRoomId)
           setError(readableError(bootError))
         }
       } finally {
@@ -154,10 +198,21 @@ export default function App() {
     return () => { active = false }
   }, []) // a inicialização acontece apenas na abertura
 
+  // sem copia salva a tela de reconexao fica esperando; quando a internet volta,
+  // tenta de novo sozinha
+  useEffect(() => {
+    if (booting || snapshot || !activeRoomId || !online) return
+    void reconnect()
+  }, [booting, snapshot, activeRoomId, online, reconnect])
+
   useEffect(() => {
     if (!activeRoomId || !snapshot) return
     return repository.subscribe(activeRoomId, () => {
-      void loadRoom(activeRoomId, true).catch(() => undefined)
+      void loadRoom(activeRoomId, true).catch((refreshError: unknown) => {
+        if (!isAccessRevoked(refreshError)) return
+        forgetAccess(activeRoomId)
+        setError(readableError(refreshError))
+      })
     })
   }, [activeRoomId, snapshot?.room.id, loadRoom])
 
@@ -185,7 +240,7 @@ export default function App() {
   }, [])
 
   const enterRoom = async (roomId: string) => {
-    localStorage.setItem(ACTIVE_ROOM_KEY, roomId)
+    saveActiveRoomId(roomId)
     setActiveRoomId(roomId)
     await loadRoom(roomId)
     window.history.replaceState({}, '', window.location.pathname)
@@ -297,11 +352,9 @@ export default function App() {
   }
 
   const leaveRoom = () => {
-    localStorage.removeItem(ACTIVE_ROOM_KEY)
-    setActiveRoomId(null)
-    setSnapshot(null)
-    setView('ranking')
+    forgetAccess(activeRoomId)
     setError('')
+    closeModal()
   }
 
   const install = async () => {
@@ -313,6 +366,14 @@ export default function App() {
   }
 
   if (booting) return <Spinner label="Ajustando as coordenadas…" />
+
+  // o acesso continua guardado: so falta conexao para trazer o ranking. A falta
+  // de internet ja e o assunto da tela, entao so erros que dizem outra coisa
+  // (banco fora do ar, configuracao faltando) aparecem em destaque.
+  if (!snapshot && activeRoomId) {
+    const detail = /sem internet/i.test(error) ? '' : error
+    return <Reconnect busy={busy} error={detail} onRetry={reconnect} onLeave={leaveRoom} />
+  }
 
   if (!snapshot) {
     return (
@@ -334,12 +395,19 @@ export default function App() {
         <Brand compact />
         <div className="topbar__room">
           <span>{snapshot.room.name}</span>
-          <small className={online ? '' : 'offline'}><i /> {repository.isDemo ? 'modo local' : online ? 'sincronizado' : 'sem conexão'}</small>
+          <small className={cachedAt || !online ? 'offline' : ''}><i /> {repository.isDemo ? 'modo local' : cachedAt ? 'dados salvos' : online ? 'sincronizado' : 'sem conexão'}</small>
         </div>
         {installPrompt && <button className="topbar__action install-action" type="button" onClick={install} aria-label="Instalar aplicativo"><Download size={18} /></button>}
         <button className="topbar__action" type="button" onClick={() => openModal('share')} aria-label="Compartilhar liga"><Share2 size={18} /></button>
-        <button className="topbar__action topbar__leave" type="button" onClick={leaveRoom} aria-label="Sair da liga"><LogOut size={18} /></button>
       </header>
+
+      {cachedAt && (
+        <div className="offline-banner">
+          <CloudOff size={15} />
+          <p>Sem conexão. Mostrando o ranking {describeSavedAt(cachedAt)}; seu acesso continua guardado.</p>
+          <button type="button" onClick={reconnect} disabled={busy}>{busy ? 'Tentando…' : 'Tentar de novo'}</button>
+        </div>
+      )}
 
       {repository.isDemo && (
         <div className="demo-banner"><span>Prévia local</span><p>Os dados deste modo ficam somente neste aparelho.</p><button type="button" onClick={leaveRoom}>Conectar banco</button></div>
@@ -354,7 +422,7 @@ export default function App() {
       />
 
       <main className="app-content">
-        {view === 'ranking' && <RankingView snapshot={visible!} metric={metric} onMetric={setMetric} onNewMatch={openNewMatch} filtered={!!range} onClearPeriod={clearPeriod} today={today} periodLabel={formatPeriodLabel(range)} onToast={showToast} onOpenMatch={openMatchDetail} />}
+        {view === 'ranking' && <RankingView snapshot={visible!} metric={metric} onMetric={setMetric} onNewMatch={openNewMatch} filtered={!!range} onClearPeriod={clearPeriod} today={today} periodLabel={formatPeriodLabel(range)} onToast={showToast} onOpenMatch={openMatchDetail} stale={!!cachedAt} />}
         {view === 'matches' && <MatchesView snapshot={visible!} onNew={openNewMatch} onEdit={(match) => { setEditingMatch(match); openModal('match-edit') }} onDelete={deleteMatch} onOpen={openMatchDetail} filtered={!!range} onClearPeriod={clearPeriod} />}
         {view === 'players' && <PlayersView snapshot={visible!} onAdd={() => { setEditingPlayer(undefined); openModal('player') }} onEdit={(player) => { setEditingPlayer(player); openModal('player') }} />}
         {view === 'insights' && <InsightsView snapshot={visible!} history={snapshot} filtered={!!range} onClearPeriod={clearPeriod} />}
@@ -370,7 +438,7 @@ export default function App() {
       {modal === 'match' && <MatchSheet players={snapshot.players} matchNumber={snapshot.matches.length + 1} busy={busy} initialShareText={pendingShare} onClose={closeModal} onSave={saveMatch} onImport={importResult} />}
       {modal === 'match-edit' && editingMatch && <MatchEditSheet match={editingMatch} busy={busy} onClose={closeModal} onSave={updateMatch} />}
       {modal === 'player' && <PlayerSheet player={editingPlayer} busy={busy} onClose={closeModal} onSave={savePlayer} onDelete={editingPlayer ? deletePlayer : undefined} />}
-      {modal === 'share' && <ShareSheet room={snapshot.room} onClose={closeModal} onToast={showToast} />}
+      {modal === 'share' && <ShareSheet room={snapshot.room} onClose={closeModal} onToast={showToast} onLeave={leaveRoom} />}
       {modal === 'match-detail' && detailMatch && (
         <MatchDetailSheet match={detailMatch} players={snapshot.players} scores={snapshot.scores} rounds={snapshot.rounds ?? []} onClose={closeModal} />
       )}

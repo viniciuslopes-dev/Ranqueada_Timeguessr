@@ -159,9 +159,11 @@ type RankingProps = {
   periodLabel: string
   onToast: (message: string) => void
   onOpenMatch: (match: GameMatch) => void
+  // true quando a tela esta mostrando a copia salva no aparelho
+  stale?: boolean
 }
 
-export function RankingView({ snapshot, metric, onMetric, onNewMatch, filtered, onClearPeriod, today, periodLabel, onToast, onOpenMatch }: RankingProps) {
+export function RankingView({ snapshot, metric, onMetric, onNewMatch, filtered, onClearPeriod, today, periodLabel, onToast, onOpenMatch, stale = false }: RankingProps) {
   const ranking = buildRanking(snapshot.players, snapshot.matches, snapshot.scores, metric)
   const leader = ranking[0]
   const descriptor = RANKING_METRICS.find((item) => item.key === metric) ?? RANKING_METRICS[0]
@@ -212,7 +214,7 @@ export function RankingView({ snapshot, metric, onMetric, onNewMatch, filtered, 
       <section>
         <div className="section-heading">
           <div><span className="section-kicker">PLACAR GERAL</span><h2>Ranking da liga</h2></div>
-          <span className="live-pill"><i /> sincronizado</span>
+          <span className={stale ? 'live-pill live-pill--stale' : 'live-pill'}><i /> {stale ? 'dados salvos' : 'sincronizado'}</span>
         </div>
         <div className="segmented ranking-filter" role="tablist" aria-label="Critério do ranking">
           {RANKING_METRICS.map((item) => (
