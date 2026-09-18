@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { CalendarDays, Check, CheckCircle2, Clock3, Copy, Globe2, Keyboard, ClipboardPaste, Share2, Trophy, Trash2 } from 'lucide-react'
+import { CalendarDays, Check, CheckCircle2, Clock3, Copy, Globe2, Keyboard, ClipboardPaste, LogOut, Share2, Trophy, Trash2 } from 'lucide-react'
 import type { GameMatch, ImportResultInput, MatchInput, MatchUpdateInput, Player, Room, RoundDetail, Score } from '../types'
 import { localToday, resolvePeriod, type Period } from '../lib/period'
 import { buildMatchSummary, formatScore, formatShortDate, getHardestRound, getRoundValue, ROUND_METRICS, type MatchSummary, type RoundMetric } from '../lib/ranking'
@@ -572,7 +572,7 @@ export function PlayerSheet({ player, busy, onClose, onSave, onDelete }: PlayerS
   )
 }
 
-export function ShareSheet({ room, onClose, onToast }: { room: Room; onClose: () => void; onToast: (message: string) => void }) {
+export function ShareSheet({ room, onClose, onToast, onLeave }: { room: Room; onClose: () => void; onToast: (message: string) => void; onLeave: () => void }) {
   const link = `${window.location.origin}${window.location.pathname}?room=${room.invite_code}`
   const message = `Entre na liga “${room.name}” no CronoRank! Código: ${room.invite_code}`
 
@@ -589,6 +589,13 @@ export function ShareSheet({ room, onClose, onToast }: { room: Room; onClose: ()
     }
   }
 
+  // Saida discreta e com confirmacao: o acesso fica guardado para sempre, entao
+  // sair e a excecao — e nunca pode acontecer por um toque sem querer.
+  const leave = () => {
+    const confirmed = window.confirm(`Sair da liga “${room.name}” neste aparelho? Para voltar você vai precisar do código ${room.invite_code}.`)
+    if (confirmed) onLeave()
+  }
+
   return (
     <Sheet title="Chamar a galera" subtitle="Quem tiver o código pode entrar na liga" onClose={onClose}>
       <div className="share-content">
@@ -599,6 +606,7 @@ export function ShareSheet({ room, onClose, onToast }: { room: Room; onClose: ()
         </div>
         <button className="primary-button primary-button--large" type="button" onClick={share}><Share2 size={19} /> Compartilhar convite</button>
         <p>Seus amigos só precisam abrir o link, escolher um nick e pronto.</p>
+        <button className="leave-link" type="button" onClick={leave}><LogOut size={13} /> sair da liga neste aparelho</button>
       </div>
     </Sheet>
   )

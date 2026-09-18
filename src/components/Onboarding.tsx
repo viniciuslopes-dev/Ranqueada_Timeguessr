@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { ArrowRight, BarChart3, Radio, Sparkles, Users } from 'lucide-react'
+import { ArrowRight, BarChart3, CloudOff, Radio, RefreshCw, Sparkles, Users } from 'lucide-react'
 import { Brand } from './ui'
 
 type Props = {
@@ -83,6 +83,24 @@ export function Onboarding({ isDemo, initialCode, busy, error, onCreate, onJoin,
         )}
       </section>
       <p className="onboarding__footer">Não oficial e feito com carinho para fãs de TimeGuessr.</p>
+    </main>
+  )
+}
+
+// Abertura sem internet e sem copia salva: o acesso continua no aparelho, entao
+// a tela espera a conexao em vez de mandar o jogador digitar o codigo de novo.
+export function Reconnect({ busy, error, onRetry, onLeave }: { busy: boolean; error: string; onRetry: () => void; onLeave: () => void }) {
+  return (
+    <main className="reconnect">
+      <Brand />
+      <span className="reconnect__icon"><CloudOff size={26} /></span>
+      <h1>Sem conexão agora</h1>
+      <p>Seu acesso à liga continua guardado neste aparelho. Assim que a internet voltar, o ranking aparece sozinho.</p>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <button className="primary-button" type="button" onClick={onRetry} disabled={busy}>
+        <RefreshCw size={17} /> {busy ? 'Tentando…' : 'Tentar de novo'}
+      </button>
+      <button className="reconnect__leave" type="button" onClick={onLeave}>usar outro código</button>
     </main>
   )
 }

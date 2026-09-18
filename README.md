@@ -10,7 +10,7 @@ PWA mobile-first para registrar partidas de TimeGuessr entre amigos. Tem salas p
 - **Neon:** PostgreSQL persistente com conexão HTTP otimizada para funções serverless.
 - **GitHub:** versionamento e deploy automático a cada push.
 
-O navegador nunca recebe a senha do PostgreSQL. A variável `DATABASE_URL` existe somente na Netlify Function. Ao entrar em uma sala, o aparelho guarda um token longo e privado no `localStorage`; o código curto de seis caracteres serve apenas para obter esse acesso.
+O navegador nunca recebe a senha do PostgreSQL. A variável `DATABASE_URL` existe somente na Netlify Function. Ao entrar em uma sala, o aparelho guarda um token longo e privado no `localStorage`; o código curto de seis caracteres serve apenas para obter esse acesso. Esse token não expira sozinho: só sai do aparelho se a própria API recusar o acesso ou se você usar a saída manual.
 
 ## Testar somente a interface
 
@@ -84,6 +84,18 @@ O `netlify.toml` já define `npm run build`, a pasta `dist`, a pasta de Function
 
 O app consulta atualizações da sala a cada sete segundos enquanto está visível e atualiza imediatamente depois de uma alteração. Se o Neon estiver inativo, a primeira consulta pode demorar alguns segundos enquanto o compute é reativado.
 
+## Abrir o app sem internet
+
+O acesso à liga fica guardado no aparelho e continua valendo mesmo que o app abra sem conexão:
+
+- a cada sincronização o aparelho guarda uma cópia do ranking (só grava de novo quando algo muda, para não pesar);
+- abrindo offline, o app mostra essa cópia com o aviso **“Sem conexão. Mostrando o ranking de …”** e o selo do ranking vira **dados salvos**;
+- assim que a internet volta, tudo se atualiza sozinho e o aviso some — o botão **Tentar de novo** força a tentativa;
+- se ainda não houver cópia salva, aparece uma tela de espera com **Tentar de novo**, nunca o pedido do código;
+- o código só é pedido de novo quando a API responde que aquele acesso não vale mais (token trocado ou liga apagada).
+
+Para sair de propósito, abra **Compartilhar liga** e toque em **sair da liga neste aparelho**, no rodapé da folha. A saída pede confirmação e lembra o código, porque apaga o token e a cópia local.
+
 ## Jogar a daily do dia
 
 O quadro **Hoje**, no topo do ranking, traz o botão **Jogar a daily de hoje**, que abre <https://timeguessr.com/play?mode=daily> em outra aba — o CronoRank continua aberto com o ranking do jeito que estava. Com o quadro recolhido, o mesmo atalho vira o botão de globo ao lado do `+`, e a folha **Nova partida** repete o link em “Ainda não jogou?”.
@@ -105,7 +117,8 @@ O número oficial, como `TimeGuessr #1191`, reúne os resultados dos amigos na m
 - IDs, textos, cores, datas e placares são validados no servidor.
 - As queries usam parâmetros do driver Neon para evitar injeção de SQL.
 - Para a dinâmica informal do grupo, quem entra pelo código pode editar jogadores e partidas.
-- Se alguém limpar os dados do navegador ou trocar de aparelho, basta entrar novamente pelo código.
+- Falha de rede, banco dormindo ou deploy no ar nunca apagam o acesso guardado.
+- Se alguém limpar os dados do navegador, sair pela folha de convite ou trocar de aparelho, basta entrar novamente pelo código.
 
 Se o código de uma sala for divulgado publicamente, qualquer pessoa com ele poderá entrar. Uma evolução futura possível é separar permissões de organizador e participante.
 

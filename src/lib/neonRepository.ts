@@ -1,18 +1,19 @@
 import type { GameMatch, ImportResultInput, MatchInput, MatchUpdateInput, Player, RoomSnapshot } from '../types'
-import { isNeonApiEnabled, neonApi } from './api'
+import { ApiError, isNeonApiEnabled, neonApi } from './api'
 import { localDaysAgo, localToday } from './period'
+import { readAccessToken, readCachedRoom, saveAccessToken, saveCachedRoom, type CachedRoom } from './roomAccess'
 
 const DEMO_STORAGE_KEY = 'cronorank:demo-data:v1'
 const DEMO_ROOM_ID = 'demo-room'
-const TOKEN_PREFIX = 'cronorank:room-token:'
 const today = localToday
 const daysAgo = localDaysAgo
 const uid = () => crypto.randomUUID()
-const tokenKey = (roomId: string) => `${TOKEN_PREFIX}${roomId}`
 
+// 401 para cair na mesma trilha de "acesso revogado" do servidor: sem token
+// guardado, so o codigo da liga resolve.
 function requireToken(roomId: string): string {
-  const token = localStorage.getItem(tokenKey(roomId))
-  if (!token) throw new Error('Acesso à liga não encontrado. Entre novamente usando o código.')
+  const token = readAccessToken(roomId)
+  if (!token) throw new ApiError('Acesso à liga não encontrado. Entre novamente usando o código.', 401)
   return token
 }
 
@@ -75,8 +76,17 @@ export const repository = {
 
   async initialize() {},
 
+  // Copia local do ultimo ranking carregado, usada quando o app abre sem rede.
+  readCachedRoom(roomId: string): CachedRoom | null {
+    return isNeonApiEnabled ? readCachedRoom(roomId) : null
+  },
+
   async loadRoom(roomId: string): Promise<RoomSnapshot> {
-    if (isNeonApiEnabled) return neonApi.loadRoom(roomId, requireToken(roomId))
+    if (isNeonApiEnabled) {
+      const snapshot = await neonApi.loadRoom(roomId, requireToken(roomId))
+      saveCachedRoom(roomId, snapshot)
+      return snapshot
+    }
     const snapshot = getDemoData()[roomId]
     if (!snapshot) throw new Error('Sala não encontrada neste aparelho.')
     snapshot.rounds ??= []
@@ -87,7 +97,7 @@ export const repository = {
   async createRoom(name: string, nickname: string): Promise<{ roomId: string; code: string }> {
     if (isNeonApiEnabled) {
       const result = await neonApi.createRoom(name, nickname)
-      localStorage.setItem(tokenKey(result.roomId), result.accessToken)
+      saveAccessToken(result.roomId, result.accessToken)
       return { roomId: result.roomId, code: result.code! }
     }
     const roomId = uid()
@@ -103,7 +113,7 @@ export const repository = {
   async joinRoom(code: string, nickname: string): Promise<{ roomId: string }> {
     if (isNeonApiEnabled) {
       const result = await neonApi.joinRoom(code.toUpperCase(), nickname)
-      localStorage.setItem(tokenKey(result.roomId), result.accessToken)
+      saveAccessToken(result.roomId, result.accessToken)
       return { roomId: result.roomId }
     }
     const room = Object.values(getDemoData()).find((item) => item.room.invite_code === code.toUpperCase())
