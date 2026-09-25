@@ -132,6 +132,7 @@ npm run build     # TypeScript do front/API e build PWA de produção
 npm run preview   # prévia local do build estático
 ```
 
+npm run format    # formata com Prettier os arquivos que não estão no .prettierignore
 ## Regras atuais
 
 - Cada placar vai de 0 a 50.000 pontos.
@@ -182,4 +183,4 @@ A API aplica automaticamente a migração aditiva de `players.archived`, `room_p
 
 `room_progress` guarda temporadas, conquistas, estilos, desafios e versões de regras em JSONB. Leituras usam snapshot consistente e gravações com comparação de revisão; alterações de partidas incrementam a revisão na mesma transação que os placares e a auditoria. Uma concorrência força nova leitura em vez de sobrescrever recompensas ou preferências. O modo local usa o mesmo motor de regras e persiste no navegador; a identidade nesse modo é apenas demonstrativa.
 
-Validação: `npm test` cobre o motor competitivo, correções, identidade, validações da API e concorrência. `npm run build` verifica TypeScript do cliente e das Functions e gera o PWA. Os testes de API usam um banco simulado; a migração deve ser acompanhada no primeiro acesso ao ambiente publicado.
+Validação: a cada push na `main` e em todo pull request, o GitHub Actions (`.github/workflows/ci.yml`) roda `npm run format:check`, `npm test` e `npm run build`. O código anterior ao Prettier está listado no `.prettierignore`; arquivos novos entram na checagem automaticamente. `npm test` cobre o motor competitivo, correções, identidade, validações da API e concorrência. `npm run build` verifica TypeScript do cliente e das Functions e gera o PWA. Os testes de API usam um banco simulado; a migração deve ser acompanhada no primeiro acesso ao ambiente publicado.

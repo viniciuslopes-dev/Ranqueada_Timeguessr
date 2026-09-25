@@ -1,0 +1,27 @@
+package-lock.json
+
+# Código anterior à adoção do Prettier, formatado à mão. Fica fora da checagem
+# para não virar um diff gigante de uma vez; arquivos novos entram sozinhos.
+# Para migrar um deles: tire-o daqui e rode `npm run format`.
+index.html
+README.md
+netlify/functions/api.mts
+src/App.tsx
+src/components/Onboarding.tsx
+src/components/Sheets.tsx
+src/components/Views.tsx
+src/components/ui.tsx
+src/lib/api.ts
+src/lib/neonRepository.ts
+src/lib/period.test.ts
+src/lib/period.ts
+src/lib/ranking.test.ts
+src/lib/ranking.ts
+src/lib/roomAccess.test.ts
+src/lib/roomAccess.ts
+src/lib/timeguessrParser.ts
+src/styles.css
+tests/api.test.ts
+tsconfig.functions.json
+tsconfig.json
+vite.config.ts
