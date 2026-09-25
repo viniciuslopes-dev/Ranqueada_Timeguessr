@@ -1,12 +1,20 @@
 import type { GameMatch, ImportResultInput, MatchInput, MatchUpdateInput, Player, RoomSnapshot } from '../types'
-import { ApiError, isNeonApiEnabled, neonApi } from './api'
+import { ApiError, isNeonApiEnabled, neonApi, type RoomAccess } from './api'
 import { localDaysAgo, localToday } from './period'
-import { readAccessToken, readCachedRoom, saveAccessToken, saveCachedRoom, type CachedRoom } from './roomAccess'
+import { readAccessToken, readCachedRoom, saveAccessToken, saveCachedRoom, touchCachedRoom, type CachedRoom } from './roomAccess'
 import { applyProgressCommand, decoratePlayers, reconcileProgress, validDay, weekClosed, weekOf, leagueToday, type ProgressCommand } from './progression'
 
 export type ProfileIdentity = { playerId: string; profileToken: string }
+// linked: o nick virou o perfil deste aparelho; taken: o perfil ja tem chave em
+// outro aparelho; none: nao ha perfil ativo com esse nick
+export type ProfileLink = 'linked' | 'taken' | 'none'
+const profileKey = (roomId: string, playerId: string) => `cronorank:profile-key:${roomId}:${playerId}`
 export function readProfileIdentity(roomId: string): ProfileIdentity | null {
   try { return JSON.parse(localStorage.getItem(`cronorank:identity:${roomId}`) ?? 'null') } catch { return null }
+}
+function saveProfileIdentity(roomId: string, identity: ProfileIdentity) {
+  localStorage.setItem(profileKey(roomId, identity.playerId), identity.profileToken)
+  localStorage.setItem(`cronorank:identity:${roomId}`, JSON.stringify(identity))
 }
 const validateDate = (day: string, reason = '') => {
   if (!validDay(day) || day > leagueToday()) throw new Error('Use uma data válida até hoje, no horário de Brasília.')
@@ -94,14 +102,30 @@ export const repository = {
   async initialize() {},
 
   async claimProfile(roomId: string, playerId: string, profileToken?: string): Promise<ProfileIdentity> {
-    const key = `cronorank:profile-key:${roomId}:${playerId}`
-    const savedToken = profileToken || localStorage.getItem(key) || undefined
+    const savedToken = profileToken || localStorage.getItem(profileKey(roomId, playerId)) || undefined
     const result = isNeonApiEnabled
       ? await neonApi.claimProfile(roomId, playerId, savedToken, requireToken(roomId))
       : { playerId, profileToken: savedToken || crypto.randomUUID() + crypto.randomUUID() }
-    localStorage.setItem(key, result.profileToken)
-    localStorage.setItem(`cronorank:identity:${roomId}`, JSON.stringify(result))
+    saveProfileIdentity(roomId, result)
     return result
+  },
+
+  // Depois de criar ou entrar na liga, o nick informado vira o perfil deste
+  // aparelho. Se o perfil ja tinha chave, so vale a chave guardada aqui (quem
+  // saiu da liga e voltou); sem ela, o jogador vincula depois, como antes.
+  async linkProfile(roomId: string, access: Pick<RoomAccess, 'playerId' | 'profileToken'>): Promise<ProfileLink> {
+    if (!access.playerId) return 'none'
+    try {
+      if (access.profileToken) {
+        saveProfileIdentity(roomId, { playerId: access.playerId, profileToken: access.profileToken })
+        return 'linked'
+      }
+      if (!localStorage.getItem(profileKey(roomId, access.playerId))) return 'taken'
+      await this.claimProfile(roomId, access.playerId)
+      return 'linked'
+    } catch {
+      return 'taken'
+    }
   },
 
   async progressCommand(roomId: string, command: ProgressCommand) {
@@ -136,31 +160,56 @@ export const repository = {
     return decoratePlayers(structuredClone(snapshot))
   },
 
+  // Consulta automatica: com a revisao conhecida, a API so manda a liga inteira
+  // quando algo mudou. null quer dizer "nada novo desde a ultima leitura".
+  async refreshRoom(roomId: string, knownRevision?: number): Promise<RoomSnapshot | null> {
+    if (!isNeonApiEnabled || knownRevision === undefined) return this.loadRoom(roomId)
+    const result = await neonApi.refreshRoom(roomId, knownRevision, requireToken(roomId))
+    if ('unchanged' in result) {
+      touchCachedRoom(roomId)
+      return null
+    }
+    saveCachedRoom(roomId, result)
+    return result
+  },
+
   async createRoom(name: string, nickname: string): Promise<{ roomId: string; code: string }> {
     if (isNeonApiEnabled) {
       const result = await neonApi.createRoom(name, nickname)
       saveAccessToken(result.roomId, result.accessToken)
+      await this.linkProfile(result.roomId, result)
       return { roomId: result.roomId, code: result.code! }
     }
     const roomId = uid()
+    const playerId = uid()
     const code = Math.random().toString(36).slice(2, 8).toUpperCase()
     saveDemoRoom({
       room: { id: roomId, name, invite_code: code, created_at: new Date().toISOString() },
-      players: [{ id: uid(), room_id: roomId, nickname, color: '#ff7043', created_at: new Date().toISOString() }],
+      players: [{ id: playerId, room_id: roomId, nickname, color: '#ff7043', created_at: new Date().toISOString() }],
       matches: [], scores: [], rounds: [],
     })
+    await this.linkProfile(roomId, { playerId, profileToken: crypto.randomUUID() + crypto.randomUUID() })
     return { roomId, code }
   },
 
-  async joinRoom(code: string, nickname: string): Promise<{ roomId: string }> {
+  async joinRoom(code: string, nickname: string): Promise<{ roomId: string; profile: ProfileLink }> {
     if (isNeonApiEnabled) {
       const result = await neonApi.joinRoom(code.toUpperCase(), nickname)
       saveAccessToken(result.roomId, result.accessToken)
-      return { roomId: result.roomId }
+      return { roomId: result.roomId, profile: await this.linkProfile(result.roomId, result) }
     }
     const room = Object.values(getDemoData()).find((item) => item.room.invite_code === code.toUpperCase())
     if (!room) throw new Error('Código não encontrado no modo local.')
-    return { roomId: room.room.id }
+    // igual a API: um nick novo entra na liga e vira o perfil deste aparelho
+    const sameNick = (player: Player) => player.nickname.toLowerCase() === nickname.toLowerCase()
+    let player = room.players.find((item) => sameNick(item) && !item.archived)
+    if (!room.players.some(sameNick)) {
+      player = { id: uid(), room_id: room.room.id, nickname, color: '#4f7cff', created_at: new Date().toISOString() }
+      room.players.push(player)
+      saveDemoRoom(room)
+    }
+    const profile = player ? await this.linkProfile(room.room.id, { playerId: player.id, profileToken: crypto.randomUUID() + crypto.randomUUID() }) : 'none'
+    return { roomId: room.room.id, profile }
   },
 
   async addPlayer(roomId: string, nickname: string, color: string) {

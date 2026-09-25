@@ -82,6 +82,10 @@ export default function App() {
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null)
   const [period, setPeriod] = useState<Period>(readStoredPeriod)
   const seenScores = useRef<Set<string>>(new Set())
+  // revisao e dia da ultima leitura completa. A consulta automatica so baixa a
+  // liga de novo quando a revisao muda ou o dia vira: semanas fecham pela data,
+  // sem nenhuma gravacao que mexa na revisao.
+  const synced = useRef<{ roomId: string; revision: number; day: string } | null>(null)
 
   const showToast = useCallback((message: string) => {
     setToast(message)
@@ -125,7 +129,16 @@ export default function App() {
 
   const loadRoom = useCallback(async (roomId: string, quiet = false) => {
     try {
-      const data = await repository.loadRoom(roomId)
+      const day = leagueToday()
+      const known = quiet && synced.current?.roomId === roomId && synced.current.day === day ? synced.current.revision : undefined
+      const data = quiet ? await repository.refreshRoom(roomId, known) : await repository.loadRoom(roomId)
+      // nada mudou no servidor: o ranking na tela continua valendo e nada renderiza de novo
+      if (!data) {
+        setCachedAt(null)
+        setError('')
+        return
+      }
+      synced.current = typeof data.revision === 'number' ? { roomId, revision: data.revision, day } : null
       // numa recarga automatica, avisa os placares que chegaram de outro aparelho
       if (quiet) {
         const arrivals = data.scores.filter((score) => !seenScores.current.has(score.id))
@@ -148,6 +161,7 @@ export default function App() {
   const forgetAccess = useCallback((roomId: string | null) => {
     if (roomId) forgetRoom(roomId)
     else clearActiveRoom()
+    synced.current = null
     setActiveRoomId(null)
     setSnapshot(null)
     setCachedAt(null)
@@ -271,7 +285,9 @@ export default function App() {
     try {
       const result = await repository.joinRoom(code, nickname)
       await enterRoom(result.roomId)
-      showToast('Você entrou na liga!')
+      showToast(result.profile === 'taken'
+        ? 'Você entrou! Esse nick já tem perfil vinculado em outro aparelho.'
+        : 'Você entrou na liga!')
     } catch (joinError) {
       setError(readableError(joinError))
     } finally {
@@ -444,7 +460,7 @@ export default function App() {
         <NavButton active={view === 'insights'} icon={<BarChart3 />} label="Estatísticas" onClick={() => setView('insights')} />
       </nav>
 
-      {modal === 'match' && <MatchSheet players={snapshot.players.filter(p => !p.archived)} initialPlayerId={readProfileIdentity(snapshot.room.id)?.playerId} matchNumber={snapshot.matches.length + 1} busy={busy} initialShareText={pendingShare} onClose={closeModal} onSave={saveMatch} onImport={importResult} />}
+      {modal === 'match' && <MatchSheet players={snapshot.players.filter(p => !p.archived)} matches={snapshot.matches} initialPlayerId={readProfileIdentity(snapshot.room.id)?.playerId} matchNumber={snapshot.matches.length + 1} busy={busy} initialShareText={pendingShare} onClose={closeModal} onSave={saveMatch} onImport={importResult} />}
       {modal === 'match-edit' && editingMatch && <MatchEditSheet match={editingMatch} busy={busy} onClose={closeModal} onSave={updateMatch} />}
       {modal === 'player' && <PlayerSheet player={editingPlayer} busy={busy} onClose={closeModal} onSave={savePlayer} onDelete={editingPlayer ? deletePlayer : undefined} />}
       {modal === 'share' && <ShareSheet room={snapshot.room} onClose={closeModal} onToast={showToast} onLeave={leaveRoom} />}

@@ -7,7 +7,14 @@ export type RoomAccess = {
   roomId: string
   code?: string
   accessToken: string
+  // jogador do nick informado e, quando o perfil estava livre, a chave que o
+  // vincula a este aparelho
+  playerId?: string
+  profileToken?: string
 }
+
+// resposta da consulta automatica quando nada mudou desde a revisao conhecida
+export type RoomUnchanged = { unchanged: true; revision: number }
 
 export class ApiError extends Error {
   status: number
@@ -69,6 +76,8 @@ export const neonApi = {
     apiRequest<RoomAccess>('join_room', { code, nickname }),
   loadRoom: (roomId: string, token: string) =>
     apiRequest<RoomSnapshot>('load_room', { roomId }, token),
+  refreshRoom: (roomId: string, knownRevision: number, token: string) =>
+    apiRequest<RoomSnapshot | RoomUnchanged>('load_room', { roomId, knownRevision }, token),
   addPlayer: (roomId: string, nickname: string, color: string, token: string) =>
     apiRequest<{ ok: true }>('add_player', { roomId, nickname, color }, token),
   updatePlayer: (roomId: string, playerId: string, nickname: string, color: string, token: string) =>

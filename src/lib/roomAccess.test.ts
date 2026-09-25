@@ -8,6 +8,7 @@ import {
   saveAccessToken,
   saveActiveRoomId,
   saveCachedRoom,
+  touchCachedRoom,
 } from './roomAccess'
 import type { RoomSnapshot } from '../types'
 
@@ -95,6 +96,20 @@ describe('acesso guardado da liga', () => {
     saveCachedRoom('room-throttle', snapshotFor('room-throttle', 'Liga renomeada'), '2026-09-18T20:00:14.000Z')
     expect(storage.writes.filter((key) => key === 'cronorank:room-cache:room-throttle')).toHaveLength(2)
     expect(readCachedRoom('room-throttle')?.snapshot.room.name).toBe('Liga renomeada')
+  })
+
+  it('consulta sem mudanças só avança a hora da sincronização', () => {
+    const storage = createStorage()
+    globalThis.localStorage = storage
+    saveCachedRoom('room-1', snapshotFor('room-1'), '2026-09-18T20:00:00.000Z')
+    touchCachedRoom('room-1', '2026-09-18T20:00:07.000Z')
+
+    expect(storage.writes.filter((key) => key === 'cronorank:room-cache:room-1')).toHaveLength(1)
+    expect(readCachedRoom('room-1')?.savedAt).toBe('2026-09-18T20:00:07.000Z')
+
+    // sem copia salva nao ha o que datar: nada e gravado
+    touchCachedRoom('room-2', '2026-09-18T20:00:07.000Z')
+    expect(localStorage.getItem('cronorank:room-synced:room-2')).toBeNull()
   })
 
   it('libera espaço das outras ligas quando a cota estoura', () => {

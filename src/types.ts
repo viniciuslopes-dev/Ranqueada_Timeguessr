@@ -54,6 +54,9 @@ export type RoomSnapshot = {
   rounds: RoundDetail[]
   progress?: import('./lib/progression').ProgressState
   claimedPlayers?: string[]
+  // revisao da liga no servidor: a consulta automatica so baixa tudo de novo
+  // quando ela muda
+  revision?: number
 }
 
 export type MatchInput = {

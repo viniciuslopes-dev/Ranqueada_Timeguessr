@@ -75,6 +75,12 @@ export function saveCachedRoom(roomId: string, snapshot: RoomSnapshot, savedAt =
   else { remove(cacheKey(roomId)); written.delete(roomId) }
 }
 
+// A consulta automatica confirmou que nada mudou: a copia salva continua certa,
+// so a hora da ultima sincronizacao avanca.
+export function touchCachedRoom(roomId: string, savedAt = new Date().toISOString()) {
+  if (read(cacheKey(roomId))) write(syncKey(roomId), savedAt)
+}
+
 // So o servidor dizendo "esse token nao vale mais" (ou o usuario saindo) apaga
 // o acesso. Falha de rede nunca passa por aqui.
 export function forgetRoom(roomId: string) {

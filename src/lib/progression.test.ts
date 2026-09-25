@@ -9,10 +9,25 @@ import {
   leagueToday,
   reconcileProgress,
   rulesFor,
+  sameJson,
   validDay,
   weekClosed,
   weeklyStandings,
+  type ProgressState,
 } from './progression'
+
+// Inverte a ordem das chaves de todos os objetos, como o jsonb faz ao devolver
+// o estado reordenado do banco.
+const reorderKeys = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value.map(reorderKeys)
+    : value && typeof value === 'object'
+      ? Object.fromEntries(
+          Object.entries(value)
+            .reverse()
+            .map(([key, item]) => [key, reorderKeys(item)]),
+        )
+      : value
 
 const makeRoom = (): RoomSnapshot => ({
   room: { id: 'room', name: 'Amigos', invite_code: 'ABCDEF', created_at: '' },
@@ -120,6 +135,21 @@ describe('campeonato semanal', () => {
     expect(updated.seasons[0].revision).toBe(2)
     expect(updated.earned.filter((e) => e.code === 'champion').map((e) => e.playerId)).toEqual(['b'])
     expect(reconcileProgress({ ...room, progress: updated }, tuesday)).toEqual(updated)
+  })
+  it('compara estados sem depender da ordem das chaves', () => {
+    expect(sameJson({ a: 1, b: { c: [1, { d: 2, e: 3 }] } }, { b: { c: [1, { e: 3, d: 2 }] }, a: 1 })).toBe(true)
+    expect(sameJson({ a: [1, 2] }, { a: [2, 1] })).toBe(false)
+    expect(sameJson({ a: 1, b: undefined }, { a: 1 })).toBe(true)
+  })
+  it('não revisa semanas quando o estado volta do banco com as chaves reordenadas', () => {
+    const room = makeRoom()
+    match(room, '2026-09-14', [40000, 30000])
+    match(room, '2026-09-15', [40000, 30000])
+    room.progress = reorderKeys(reconcileProgress(room, tuesday)) as ProgressState
+    const next = reconcileProgress(room, new Date('2026-09-23T12:00:00Z'))
+    expect(next.seasons[0].revision).toBe(1)
+    expect(next.seasons[0].correctedAt).toBeUndefined()
+    expect(sameJson(next, room.progress)).toBe(true)
   })
   it('arquivar jogador preserva títulos e placares', () => {
     const room = makeRoom()

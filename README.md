@@ -82,7 +82,7 @@ O `netlify.toml` já define `npm run build`, a pasta `dist`, a pasta de Function
 - **Android/Chrome:** abra o endereço publicado e use “Instalar app”.
 - **iPhone/Safari:** abra o endereço, toque em **Compartilhar → Adicionar à Tela de Início**.
 
-O app consulta atualizações da sala a cada sete segundos enquanto está visível e atualiza imediatamente depois de uma alteração. Se o Neon estiver inativo, a primeira consulta pode demorar alguns segundos enquanto o compute é reativado.
+O app consulta atualizações da sala a cada sete segundos enquanto está visível e atualiza imediatamente depois de uma alteração. A consulta automática envia a revisão da liga que o aparelho já tem: se nada mudou, a API responde só o número, sem mandar o histórico de novo. Toda gravação (partidas, jogadores, perfis e preferências) avança essa revisão; na virada do dia o app baixa a liga inteira, porque semanas fecham pela data. Se o Neon estiver inativo, a primeira consulta pode demorar alguns segundos enquanto o compute é reativado.
 
 ## Abrir o app sem internet
 
@@ -105,7 +105,11 @@ O quadro **Hoje**, no topo do ranking, traz o botão **Jogar a daily de hoje**, 
 1. No TimeGuessr, compartilhe o resultado no grupo.
 2. Copie a mensagem completa no WhatsApp.
 3. No CronoRank, toque em **Nova partida → Colar resultado**.
-4. Cole a mensagem, confira a prévia das cinco rodadas, escolha o jogador e salve.
+4. Cole a mensagem, confira a prévia das cinco rodadas e a data, escolha o jogador e salve.
+
+A data vem do número oficial do jogo: se o número já está na liga, vale a mesma data (a API não aceita outra); senão, ela é deduzida pelas partidas numeradas mais próximas, e o resultado de domingo colado na segunda cai no domingo. Na primeira partida numerada da liga, a data começa em hoje e vale conferir. Ela nunca passa de hoje e pode ser trocada à mão.
+
+Em **Digitar placares**, campo vazio não vira zero: preencha o placar de cada jogador marcado ou desmarque quem não jogou.
 
 O número oficial, como `TimeGuessr #1191`, reúne os resultados dos amigos na mesma partida. Colar novamente o mesmo número para o mesmo jogador atualiza o resultado dele. Na aba **Partidas**, toque em um jogador para abrir os detalhes de cada pergunta; em **Estatísticas**, compare erro médio de ano, distância média e pontos por rodada.
 
@@ -128,11 +132,11 @@ Se o código de uma sala for divulgado publicamente, qualquer pessoa com ele pod
 npm run dev       # interface local em modo demonstração
 npx netlify dev   # interface + Function + Neon
 npm test          # testes automatizados
+npm run format    # formata com Prettier os arquivos que não estão no .prettierignore
 npm run build     # TypeScript do front/API e build PWA de produção
 npm run preview   # prévia local do build estático
 ```
 
-npm run format    # formata com Prettier os arquivos que não estão no .prettierignore
 ## Regras atuais
 
 - Cada placar vai de 0 a 50.000 pontos.
@@ -168,7 +172,7 @@ O álbum oferece 16 conquistas de participação, recordes pessoais, precisão, 
 
 ## Perfil, estilo e desafios
 
-Em **Qual jogador é você?**, o participante vincula seu perfil ao aparelho. O primeiro vínculo de um perfil existente segue o modelo de confiança da sala: escolha apenas o próprio nick. Depois disso, a API exige uma chave privada para personalizar ou aceitar convites; entrar com o código da sala não permite assumir um perfil já vinculado.
+Quem cria a liga, ou entra nela com um nick, já sai com esse perfil vinculado ao aparelho. Se o nick já tem perfil vinculado em outro aparelho, a entrada funciona normalmente, mas sem o vínculo: use a chave do perfil. Em **Qual jogador é você?**, o participante também pode vincular ou trocar o perfil depois. O primeiro vínculo de um perfil existente segue o modelo de confiança da sala: escolha apenas o próprio nick. Depois disso, a API exige uma chave privada para personalizar ou aceitar convites; entrar com o código da sala não permite assumir um perfil já vinculado.
 
 Guarde a chave por **Jogando como → Levar meu perfil para outro aparelho**. Para recuperar, entre na mesma sala, selecione o jogador e cole sua chave. Apenas o hash da chave fica em `player_identity`; a chave não é retornada no snapshot da sala. Não existe recuperação por e-mail. O cadastro e as correções de placares continuam colaborativos, como antes.
 

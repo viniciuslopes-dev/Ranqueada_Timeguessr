@@ -671,7 +671,10 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .import-player-list button i { width: 18px; height: 18px; margin-left: auto; display: grid; place-items: center; border: 1px solid #d3d3cf; border-radius: 50%; color: #fff; background: #fff; }
 .import-player-list button.active { border-color: #76cdb3; background: #f2fcf8; box-shadow: 0 0 0 2px rgba(104,213,181,.13); }
 .import-player-list button.active i { border-color: #29aa84; background: #29aa84; }
-.import-date { max-width: 240px; }
+.import-date input { max-width: 240px; }
+.field input[readonly] { background: #f3f2ee; color: #566178; }
+.date-hint { color: var(--muted); font-size: 12px; font-weight: 500; line-height: 1.45; }
+.date-hint button { border: 0; background: none; padding: 0; color: #a64b2b; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .field-grid { display: grid; grid-template-columns: 1.4fr .85fr; gap: 10px; }
 .score-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; }
 .score-heading > div { display: grid; }

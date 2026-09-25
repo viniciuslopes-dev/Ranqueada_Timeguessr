@@ -105,6 +105,18 @@ export const rulesFor = (state: ProgressState, start: string): Rules =>
   [...state.rules].filter((r) => r.effective <= start).sort((a, b) => b.effective.localeCompare(a.effective))[0] ??
   emptyProgress().rules[0]
 
+// O jsonb do Postgres não guarda a ordem das chaves: o estado volta do banco
+// reordenado. Comparar com JSON.stringify faria toda leitura parecer uma
+// alteração, então a comparação usa as chaves em ordem alfabética.
+export function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) =>
+    item && typeof item === 'object' && !Array.isArray(item)
+      ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : item,
+  )
+}
+export const sameJson = (a: unknown, b: unknown) => canonicalJson(a) === canonicalJson(b)
+
 export const ACHIEVEMENTS = [
   {
     code: 'first',
@@ -357,8 +369,7 @@ export function reconcileProgress(snapshot: RoomSnapshot, now = new Date()): Pro
       const content = { start, end: shiftDay(start, 6), rules, ...computed }
       const changed =
         previous &&
-        JSON.stringify({ standings: previous.standings, days: previous.days, eligible: previous.eligible }) !==
-          JSON.stringify(computed)
+        !sameJson({ standings: previous.standings, days: previous.days, eligible: previous.eligible }, computed)
       return {
         ...content,
         closedAt: previous?.closedAt ?? now.toISOString(),

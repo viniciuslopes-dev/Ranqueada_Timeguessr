@@ -6,10 +6,15 @@ import { buildMatchSummary, formatScore, formatShortDate, getHardestRound, getRo
 import { formatDistanceLabel } from '../lib/distance'
 import { parseTimeGuessrShares, type ParsedTimeGuessrResult } from '../lib/timeguessrParser'
 import { leagueToday, weekClosed, weekOf } from '../lib/progression'
+import { readManualScores } from '../lib/matchEntry'
+import { deduceGameDate } from '../lib/timeguessr'
 import { DailyLink, PLAYER_COLORS, PlayerAvatar, Sheet } from './ui'
 
 type MatchSheetProps = {
   players: Player[]
+  // partidas da liga inteira, sem o filtro de periodo: servem para deduzir a
+  // data de um resultado colado pelo numero do jogo
+  matches: GameMatch[]
   matchNumber: number
   busy: boolean
   onClose: () => void
@@ -19,7 +24,7 @@ type MatchSheetProps = {
   initialPlayerId?: string
 }
 
-export function MatchSheet({ players, matchNumber, busy, initialShareText, initialPlayerId, onClose, onSave, onImport }: MatchSheetProps) {
+export function MatchSheet({ players, matches, matchNumber, busy, initialShareText, initialPlayerId, onClose, onSave, onImport }: MatchSheetProps) {
   const [mode, setMode] = useState<'paste' | 'manual'>('paste')
   const [title, setTitle] = useState(`Daily #${matchNumber}`)
   const [playedAt, setPlayedAt] = useState(leagueToday())
@@ -29,7 +34,8 @@ export function MatchSheet({ players, matchNumber, busy, initialShareText, initi
   const [correctionReason, setCorrectionReason] = useState('')
   const [shareText, setShareText] = useState(initialShareText ?? '')
   const [assignments, setAssignments] = useState<string[]>([])
-  const [importDate, setImportDate] = useState(leagueToday())
+  // data escolhida a mao; vale so para o numero de jogo em que foi escolhida
+  const [manualDate, setManualDate] = useState<{ gameNumber?: number; date: string } | null>(null)
   const [readingClipboard, setReadingClipboard] = useState(false)
   const [clipboardError, setClipboardError] = useState('')
 
@@ -39,6 +45,14 @@ export function MatchSheet({ players, matchNumber, busy, initialShareText, initi
     try { return { results: parseTimeGuessrShares(shareText), error: '' } }
     catch (parseError) { return { results: [] as ParsedTimeGuessrResult[], error: parseError instanceof Error ? parseError.message : 'Não foi possível ler o resultado.' } }
   }, [shareText])
+
+  // O numero oficial diz o dia do jogo: quem cola na segunda o resultado de
+  // domingo nao cai na semana errada por esquecer de trocar a data.
+  const gameNumber = parsed.results[0]?.gameNumber
+  const deduced = useMemo(() => gameNumber === undefined ? null : deduceGameDate(gameNumber, matches), [gameNumber, matches])
+  const importDate = deduced?.source !== 'existing' && manualDate && manualDate.gameNumber === gameNumber
+    ? manualDate.date
+    : deduced?.date ?? leagueToday()
 
   // texto novo invalida as atribuições anteriores; com um resultado só, o
   // primeiro jogador já vem escolhido como antes
@@ -58,14 +72,9 @@ export function MatchSheet({ players, matchNumber, busy, initialShareText, initi
   const submitManual = async (event: FormEvent) => {
     event.preventDefault()
     setError('')
-    const scores = players
-      .filter((player) => active[player.id])
-      .map((player) => ({ playerId: player.id, score: Number(values[player.id]) }))
-    if (!scores.length) return setError('Selecione pelo menos um jogador.')
-    if (scores.some((item) => !Number.isFinite(item.score) || item.score < 0 || item.score > 50000)) {
-      return setError('Preencha os placares entre 0 e 50.000.')
-    }
-    await onSave({ title: title.trim() || `Partida #${matchNumber}`, playedAt, scores, correctionReason })
+    const entry = readManualScores(players, active, values)
+    if ('error' in entry) return setError(entry.error)
+    await onSave({ title: title.trim() || `Partida #${matchNumber}`, playedAt, scores: entry.scores, correctionReason })
   }
 
   const submitImport = async (event: FormEvent) => {
@@ -198,8 +207,25 @@ export function MatchSheet({ players, matchNumber, busy, initialShareText, initi
 
           <label className="field field--date import-date">
             <span>Data da partida</span>
-            <input type="date" value={importDate} onChange={(event) => setImportDate(event.target.value)} required />
+            <input
+              type="date"
+              value={importDate}
+              readOnly={deduced?.source === 'existing'}
+              onChange={(event) => setManualDate({ gameNumber, date: event.target.value })}
+              required
+            />
           </label>
+          {deduced && (
+            <p className="date-hint">
+              {deduced.source === 'existing'
+                ? `Mesma data do jogo #${gameNumber}, que já está na liga. Para mudar, edite a partida na aba Partidas.`
+                : deduced.source === 'today'
+                  ? 'Primeiro jogo numerado da liga: confira se a data está certa.'
+                  : importDate === deduced.date
+                    ? `Data deduzida pelo número do jogo #${gameNumber}.`
+                    : <>Pelo número #{gameNumber}, o jogo seria de {formatShortDate(deduced.date)}. <button type="button" onClick={() => setManualDate(null)}>Usar essa data</button></>}
+            </p>
+          )}
           {error && <p className="form-error" role="alert">{error}</p>}
           <button className="primary-button primary-button--large" type="submit" disabled={busy || !parsed.results.length}>
             {busy

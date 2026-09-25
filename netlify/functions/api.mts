@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { neon } from '@neondatabase/serverless'
 import type { NeonQueryFunction } from '@neondatabase/serverless'
-import { claimIdentity, competitionWrite, ensureProgressSchema, loadProgressSnapshot, verifyIdentity } from '../lib/progression'
+import { claimIdentity, competitionWrite, currentRevision, ensureProgressSchema, hashProfileToken, loadProgressSnapshot, touchRoom, tryClaimIdentity, verifyIdentity } from '../lib/progression'
 import { leagueToday, validDay, weekClosed, weekOf, type ProgressCommand } from '../../src/lib/progression'
 
 class HttpError extends Error {
@@ -99,12 +99,15 @@ export default async (request: Request) => {
         const playerId = randomUUID()
         const code = makeCode()
         const accessToken = randomBytes(32).toString('base64url')
+        // quem cria a liga ja sai com o proprio perfil vinculado ao aparelho
+        const profileToken = randomBytes(32).toString('base64url')
         try {
           await sql.transaction([
             sql`insert into rooms (id, name, invite_code, access_token) values (${roomId}, ${name}, ${code}, ${accessToken})`,
             sql`insert into players (id, room_id, nickname, color) values (${playerId}, ${roomId}, ${nickname}, '#ff7043')`,
+            sql`insert into player_identity (player_id, room_id, token_hash) values (${playerId}, ${roomId}, ${hashProfileToken(profileToken)})`,
           ])
-          return json({ roomId, code, accessToken }, 201)
+          return json({ roomId, code, accessToken, playerId, profileToken }, 201)
         } catch (error) {
           if (!String(error).toLowerCase().includes('invite_code')) throw error
         }
@@ -123,7 +126,18 @@ export default async (request: Request) => {
         values (${randomUUID()}, ${room.id}, ${nickname}, ${colors[randomBytes(1)[0] % colors.length]})
         on conflict do nothing
       `
-      return json({ roomId: room.id, accessToken: room.access_token })
+      // O nick informado e o proprio jogador: o perfil fica vinculado a este
+      // aparelho, a menos que outro aparelho ja tenha guardado a chave dele.
+      // O vinculo tambem avanca a revisao, entao as outras telas veem o novo nick.
+      const players = await sql`select id from players where room_id = ${room.id} and lower(nickname) = lower(${nickname}) and not archived limit 1` as Array<{ id: string }>
+      const playerId = players[0]?.id
+      const profileToken = playerId ? await tryClaimIdentity(sql, room.id, playerId) : null
+      return json({
+        roomId: room.id,
+        accessToken: room.access_token,
+        ...(playerId ? { playerId } : {}),
+        ...(profileToken ? { profileToken } : {}),
+      })
     }
 
     const token = bearer(request)
@@ -131,7 +145,15 @@ export default async (request: Request) => {
     const authorized = await sql`select id from rooms where id = ${roomId} and access_token = ${token} limit 1`
     if (!authorized.length) throw new HttpError(403, 'O convite desta liga não é mais válido.')
 
-    if (action === 'load_room') return json(await loadProgressSnapshot(sql, roomId))
+    if (action === 'load_room') {
+      // consulta automatica: se a revisao que o aparelho conhece ainda e a atual,
+      // responde so o numero em vez de mandar a liga inteira de novo
+      if (Number.isInteger(body.knownRevision)) {
+        const revision = await currentRevision(sql, roomId)
+        if (revision === body.knownRevision) return json({ unchanged: true, revision })
+      }
+      return json(await loadProgressSnapshot(sql, roomId))
+    }
 
     if (action === 'claim_profile') {
       const playerId = uuid(body.playerId, 'Jogador')
@@ -158,7 +180,10 @@ export default async (request: Request) => {
       const nickname = text(body.nickname, 'Nick', 1, 24)
       const color = text(body.color, 'Cor', 7, 7)
       if (!/^#[0-9a-f]{6}$/i.test(color)) throw new HttpError(400, 'Cor inválida.')
-      await sql`insert into players (id, room_id, nickname, color) values (${randomUUID()}, ${roomId}, ${nickname}, ${color})`
+      await sql.transaction([
+        sql`insert into players (id, room_id, nickname, color) values (${randomUUID()}, ${roomId}, ${nickname}, ${color})`,
+        touchRoom(sql, roomId),
+      ])
       return json({ ok: true }, 201)
     }
 

@@ -6,6 +6,7 @@ import {
   decoratePlayers,
   emptyProgress,
   reconcileProgress,
+  sameJson,
   type ProgressCommand,
   type ProgressState,
 } from '../../src/lib/progression'
@@ -25,22 +26,41 @@ export const ensureProgressSchema = (sql: Sql) => {
   return ready
 }
 
+export const hashProfileToken = (token: string) => createHash('sha256').update(token).digest('hex')
+
 export async function verifyIdentity(sql: Sql, roomId: string, playerId: string, token: unknown) {
   if (typeof token !== 'string' || token.length < 40 || token.length > 100) return false
-  const hash = createHash('sha256').update(token).digest('hex')
   const rows =
-    await sql`select i.player_id from player_identity i join players p on p.id = i.player_id where i.room_id = ${roomId} and i.player_id = ${playerId} and i.token_hash = ${hash} and not p.archived`
+    await sql`select i.player_id from player_identity i join players p on p.id = i.player_id where i.room_id = ${roomId} and i.player_id = ${playerId} and i.token_hash = ${hashProfileToken(token)} and not p.archived`
   return rows.length > 0
+}
+
+// Vincula a este aparelho um perfil ainda livre. Devolve null quando outro
+// aparelho já guardou a chave desse jogador ou quando ele está arquivado.
+export async function tryClaimIdentity(sql: Sql, roomId: string, playerId: string): Promise<string | null> {
+  const token = randomBytes(32).toString('base64url')
+  const [claimed] = await sql.transaction([
+    sql`insert into player_identity (player_id, room_id, token_hash) select id, room_id, ${hashProfileToken(token)} from players where id = ${playerId} and room_id = ${roomId} and not archived on conflict do nothing returning player_id`,
+    touchRoom(sql, roomId),
+  ])
+  return claimed.length ? token : null
 }
 
 export async function claimIdentity(sql: Sql, roomId: string, playerId: string, existingToken: unknown) {
   if (await verifyIdentity(sql, roomId, playerId, existingToken)) return existingToken as string
-  const token = randomBytes(32).toString('base64url')
-  const hash = createHash('sha256').update(token).digest('hex')
-  const result =
-    await sql`insert into player_identity (player_id, room_id, token_hash) select id, room_id, ${hash} from players where id = ${playerId} and room_id = ${roomId} and not archived on conflict do nothing returning player_id`
-  if (!result.length) throw new Error('Este perfil já está vinculado. Use a chave do perfil salva no outro aparelho.')
+  const token = await tryClaimIdentity(sql, roomId, playerId)
+  if (!token) throw new Error('Este perfil já está vinculado. Use a chave do perfil salva no outro aparelho.')
   return token
+}
+
+// A revisão é o "algo mudou" da liga: a consulta automática compara com ela e
+// só baixa a liga inteira quando o número mudou. Toda gravação precisa passar aqui.
+export const touchRoom = (sql: Sql, roomId: string) =>
+  sql`insert into room_progress (room_id, revision) values (${roomId}, 1) on conflict (room_id) do update set revision = room_progress.revision + 1`
+
+export async function currentRevision(sql: Sql, roomId: string): Promise<number | null> {
+  const rows = (await sql`select revision from room_progress where room_id = ${roomId}`) as Array<{ revision: number }>
+  return rows[0]?.revision ?? null
 }
 
 // Todos os escritores de partidas incrementam esta revisão na mesma transação.
@@ -77,17 +97,18 @@ export async function loadProgressSnapshot(
       claimedPlayers: claims.map((c) => c.player_id),
     } as RoomSnapshot
     const next = command && actor ? applyProgressCommand(snapshot, actor, command) : reconcileProgress(snapshot)
-    if (JSON.stringify(next) === JSON.stringify(record.state)) return decoratePlayers({ ...snapshot, progress: next })
+    // sameJson ignora a ordem das chaves: o jsonb devolve o estado reordenado
+    if (sameJson(next, record.state)) return decoratePlayers({ ...snapshot, progress: next, revision: record.revision })
     const updated =
       await sql`update room_progress set state = ${JSON.stringify(next)}::jsonb, revision = revision + 1 where room_id = ${roomId} and revision = ${record.revision} returning revision`
-    if (updated.length) return decoratePlayers({ ...snapshot, progress: next })
+    if (updated.length) return decoratePlayers({ ...snapshot, progress: next, revision: Number(updated[0].revision) })
   }
   throw new Error('A liga recebeu várias atualizações. Tente novamente.')
 }
 
 export function competitionWrite(sql: Sql, roomId: string, action: string, detail: Record<string, unknown>) {
   return [
-    sql`insert into room_progress (room_id, revision) values (${roomId}, 1) on conflict (room_id) do update set revision = room_progress.revision + 1`,
+    touchRoom(sql, roomId),
     sql`insert into competition_audit (room_id, action, detail) values (${roomId}, ${action}, ${JSON.stringify(detail)}::jsonb)`,
   ]
 }
