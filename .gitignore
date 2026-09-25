@@ -7,3 +7,5 @@ dist
 *.tsbuildinfo
 .netlify
 deno.lock
+.npm-cache
+.qa

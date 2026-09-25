@@ -1,6 +1,8 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { neon } from '@neondatabase/serverless'
 import type { NeonQueryFunction } from '@neondatabase/serverless'
+import { claimIdentity, competitionWrite, ensureProgressSchema, loadProgressSnapshot, verifyIdentity } from '../lib/progression'
+import { leagueToday, validDay, weekClosed, weekOf, type ProgressCommand } from '../../src/lib/progression'
 
 class HttpError extends Error {
   constructor(public status: number, message: string) { super(message) }
@@ -87,6 +89,7 @@ export default async (request: Request) => {
     const body = await request.json() as Json
     const action = body.action
     await ensureDetailsSchema(sql)
+    await ensureProgressSchema(sql)
 
     if (action === 'create_room') {
       const name = text(body.name, 'Nome da liga', 2, 40)
@@ -128,17 +131,28 @@ export default async (request: Request) => {
     const authorized = await sql`select id from rooms where id = ${roomId} and access_token = ${token} limit 1`
     if (!authorized.length) throw new HttpError(403, 'O convite desta liga não é mais válido.')
 
-    if (action === 'load_room') {
-      const [rooms, players, matches, scores, rounds] = await sql.transaction([
-        sql`select id, name, invite_code, created_at from rooms where id = ${roomId}`,
-        sql`select id, room_id, nickname, color, created_at from players where room_id = ${roomId} order by created_at`,
-        sql`select id, room_id, title, game_number, played_at, created_at from matches where room_id = ${roomId} order by played_at desc, created_at desc`,
-        sql`select id, room_id, match_id, player_id, score, created_at from scores where room_id = ${roomId}`,
-        sql`select id, room_id, match_id, player_id, round_number, round_score, year_error, distance_km::float8 as distance_km, created_at from round_details where room_id = ${roomId}`,
-      ], { readOnly: true, isolationLevel: 'RepeatableRead' })
-      if (!rooms[0]) throw new HttpError(404, 'Liga não encontrada.')
-      return json({ room: rooms[0], players, matches, scores, rounds })
+    if (action === 'load_room') return json(await loadProgressSnapshot(sql, roomId))
+
+    if (action === 'claim_profile') {
+      const playerId = uuid(body.playerId, 'Jogador')
+      try { return json({ playerId, profileToken: await claimIdentity(sql, roomId, playerId, body.profileToken) }) }
+      catch (error) { throw new HttpError(409, error instanceof Error ? error.message : 'Perfil indisponível.') }
     }
+    if (action === 'progress_command') {
+      const playerId = uuid(body.playerId, 'Jogador')
+      if (!await verifyIdentity(sql, roomId, playerId, body.profileToken)) throw new HttpError(409, 'Vincule seu perfil neste aparelho para continuar.')
+      if (!body.command || typeof body.command !== 'object') throw new HttpError(400, 'Comando inválido.')
+      try { return json(await loadProgressSnapshot(sql, roomId, playerId, body.command as ProgressCommand)) }
+      catch (error) { throw new HttpError(400, error instanceof Error ? error.message : 'Não foi possível atualizar.') }
+    }
+
+    const correctionReason = typeof body.correctionReason === 'string' ? body.correctionReason.trim() : ''
+    const validateCompetitionDate = (day: string) => {
+      if (!validDay(day) || day > leagueToday()) throw new HttpError(400, 'Use uma data válida até hoje, no horário de Brasília.')
+      if (weekClosed(weekOf(day).from) && correctionReason.length < 5) throw new HttpError(409, 'Essa semana já encerrou. Informe o motivo da correção (mínimo de 5 caracteres); os prêmios serão revisados.')
+      if (correctionReason.length > 300) throw new HttpError(400, 'O motivo deve ter até 300 caracteres.')
+    }
+    const audit = (extra: Record<string, unknown> = {}) => competitionWrite(sql, roomId, String(action), { ...extra, reason: correctionReason })
 
     if (action === 'add_player') {
       const nickname = text(body.nickname, 'Nick', 1, 24)
@@ -153,14 +167,21 @@ export default async (request: Request) => {
       const nickname = text(body.nickname, 'Nick', 1, 24)
       const color = text(body.color, 'Cor', 7, 7)
       if (!/^#[0-9a-f]{6}$/i.test(color)) throw new HttpError(400, 'Cor inválida.')
-      const result = await sql`update players set nickname = ${nickname}, color = ${color} where id = ${playerId} and room_id = ${roomId} returning id`
+      const [result] = await sql.transaction([sql`update players set nickname = ${nickname}, color = ${color} where id = ${playerId} and room_id = ${roomId} returning id`, ...audit({ playerId })])
       if (!result.length) throw new HttpError(404, 'Jogador não encontrado.')
       return json({ ok: true })
     }
 
     if (action === 'delete_player') {
       const playerId = uuid(body.playerId, 'Jogador')
-      const result = await sql`delete from players where id = ${playerId} and room_id = ${roomId} returning id`
+      const [result] = await sql.transaction([sql`update players set archived = true where id = ${playerId} and room_id = ${roomId} returning id`, ...audit({ playerId })])
+      if (!result.length) throw new HttpError(404, 'Jogador não encontrado.')
+      return json({ ok: true })
+    }
+
+    if (action === 'restore_player') {
+      const playerId = uuid(body.playerId, 'Jogador')
+      const [result] = await sql.transaction([sql`update players set archived = false where id = ${playerId} and room_id = ${roomId} returning id`, ...audit({ playerId })])
       if (!result.length) throw new HttpError(404, 'Jogador não encontrado.')
       return json({ ok: true })
     }
@@ -168,7 +189,7 @@ export default async (request: Request) => {
     if (action === 'add_match') {
       const title = text(body.title, 'Nome da partida', 1, 50)
       const playedAt = text(body.playedAt, 'Data', 10, 10)
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(playedAt)) throw new HttpError(400, 'Data inválida.')
+      validateCompetitionDate(playedAt)
       if (!Array.isArray(body.scores) || body.scores.length < 1 || body.scores.length > 100) throw new HttpError(400, 'Placares inválidos.')
       const scores = body.scores.map((item) => {
         if (!item || typeof item !== 'object') throw new HttpError(400, 'Placar inválido.')
@@ -187,6 +208,7 @@ export default async (request: Request) => {
       if (validPlayers.length !== scores.length) throw new HttpError(400, 'Um dos jogadores não pertence a esta liga.')
       const matchId = randomUUID()
       await sql.transaction([
+        ...audit({ playedAt, matchId }),
         sql`insert into matches (id, room_id, title, played_at) values (${matchId}, ${roomId}, ${title}, ${playedAt})`,
         ...scores.map((item) => sql`insert into scores (id, room_id, match_id, player_id, score) values (${randomUUID()}, ${roomId}, ${matchId}, ${item.playerId}, ${item.score})`),
       ])
@@ -196,7 +218,7 @@ export default async (request: Request) => {
     if (action === 'import_result') {
       const playerId = uuid(body.playerId, 'Jogador')
       const playedAt = text(body.playedAt, 'Data', 10, 10)
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(playedAt)) throw new HttpError(400, 'Data inválida.')
+      validateCompetitionDate(playedAt)
       const gameNumber = Number(body.gameNumber)
       const totalScore = Number(body.totalScore)
       if (!Number.isInteger(gameNumber) || gameNumber < 1 || gameNumber > 1000000000) throw new HttpError(400, 'Número do TimeGuessr inválido.')
@@ -220,9 +242,14 @@ export default async (request: Request) => {
       const players = await sql`select id from players where id = ${playerId} and room_id = ${roomId} limit 1`
       if (!players.length) throw new HttpError(404, 'Jogador não encontrado nesta liga.')
 
-      const existing = await sql`select id from matches where room_id = ${roomId} and game_number = ${gameNumber} limit 1`
+      const existing = await sql`select id, played_at::text from matches where room_id = ${roomId} and game_number = ${gameNumber} limit 1`
+      if (existing[0]) {
+        validateCompetitionDate(existing[0].played_at as string)
+        if (existing[0].played_at !== playedAt) throw new HttpError(409, 'Esse número de jogo já tem outra data. Confira a data da partida existente antes de importar.')
+      }
       const proposedMatchId = randomUUID()
       await sql.transaction([
+        ...audit({ playedAt, gameNumber, playerId }),
         sql`
           insert into matches (id, room_id, title, game_number, played_at)
           values (${proposedMatchId}, ${roomId}, ${`TimeGuessr #${gameNumber}`}, ${gameNumber}, ${playedAt})
@@ -252,15 +279,19 @@ export default async (request: Request) => {
       const matchId = uuid(body.matchId, 'Partida')
       const title = text(body.title, 'Nome da partida', 1, 50)
       const playedAt = text(body.playedAt, 'Data', 10, 10)
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(playedAt)) throw new HttpError(400, 'Data inválida.')
-      const result = await sql`update matches set title = ${title}, played_at = ${playedAt} where id = ${matchId} and room_id = ${roomId} returning id`
+      validateCompetitionDate(playedAt)
+      const old = await sql`select played_at::text from matches where id = ${matchId} and room_id = ${roomId}`
+      if (old[0]) validateCompetitionDate(old[0].played_at as string)
+      const [result] = await sql.transaction([sql`update matches set title = ${title}, played_at = ${playedAt} where id = ${matchId} and room_id = ${roomId} returning id`, ...audit({ matchId, playedAt, previousDate: old[0]?.played_at })])
       if (!result.length) throw new HttpError(404, 'Partida não encontrada.')
       return json({ ok: true })
     }
 
     if (action === 'delete_match') {
       const matchId = uuid(body.matchId, 'Partida')
-      const result = await sql`delete from matches where id = ${matchId} and room_id = ${roomId} returning id`
+      const old = await sql`select played_at::text from matches where id = ${matchId} and room_id = ${roomId}`
+      if (old[0]) validateCompetitionDate(old[0].played_at as string)
+      const [result] = await sql.transaction([sql`delete from matches where id = ${matchId} and room_id = ${roomId} returning id`, ...audit({ matchId, previousDate: old[0]?.played_at })])
       if (!result.length) throw new HttpError(404, 'Partida não encontrada.')
       return json({ ok: true })
     }

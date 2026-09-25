@@ -5,6 +5,7 @@ import { localToday, resolvePeriod, type Period } from '../lib/period'
 import { buildMatchSummary, formatScore, formatShortDate, getHardestRound, getRoundValue, ROUND_METRICS, type MatchSummary, type RoundMetric } from '../lib/ranking'
 import { formatDistanceLabel } from '../lib/distance'
 import { parseTimeGuessrShares, type ParsedTimeGuessrResult } from '../lib/timeguessrParser'
+import { leagueToday, weekClosed, weekOf } from '../lib/progression'
 import { DailyLink, PLAYER_COLORS, PlayerAvatar, Sheet } from './ui'
 
 type MatchSheetProps = {
@@ -15,18 +16,20 @@ type MatchSheetProps = {
   onSave: (input: MatchInput) => Promise<void>
   onImport: (inputs: ImportResultInput[]) => Promise<void>
   initialShareText?: string
+  initialPlayerId?: string
 }
 
-export function MatchSheet({ players, matchNumber, busy, initialShareText, onClose, onSave, onImport }: MatchSheetProps) {
+export function MatchSheet({ players, matchNumber, busy, initialShareText, initialPlayerId, onClose, onSave, onImport }: MatchSheetProps) {
   const [mode, setMode] = useState<'paste' | 'manual'>('paste')
   const [title, setTitle] = useState(`Daily #${matchNumber}`)
-  const [playedAt, setPlayedAt] = useState(localToday())
+  const [playedAt, setPlayedAt] = useState(leagueToday())
   const [active, setActive] = useState<Record<string, boolean>>(() => Object.fromEntries(players.map((player) => [player.id, true])))
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(players.map((player) => [player.id, ''])))
   const [error, setError] = useState('')
+  const [correctionReason, setCorrectionReason] = useState('')
   const [shareText, setShareText] = useState(initialShareText ?? '')
   const [assignments, setAssignments] = useState<string[]>([])
-  const [importDate, setImportDate] = useState(localToday())
+  const [importDate, setImportDate] = useState(leagueToday())
   const [readingClipboard, setReadingClipboard] = useState(false)
   const [clipboardError, setClipboardError] = useState('')
 
@@ -40,7 +43,7 @@ export function MatchSheet({ players, matchNumber, busy, initialShareText, onClo
   // texto novo invalida as atribuições anteriores; com um resultado só, o
   // primeiro jogador já vem escolhido como antes
   useEffect(() => {
-    setAssignments(parsed.results.map(() => parsed.results.length === 1 ? players[0]?.id ?? '' : ''))
+    setAssignments(parsed.results.map(() => parsed.results.length === 1 ? players.find(p => p.id === initialPlayerId)?.id ?? players[0]?.id ?? '' : ''))
     setError('')
   }, [shareText])
 
@@ -62,16 +65,17 @@ export function MatchSheet({ players, matchNumber, busy, initialShareText, onClo
     if (scores.some((item) => !Number.isFinite(item.score) || item.score < 0 || item.score > 50000)) {
       return setError('Preencha os placares entre 0 e 50.000.')
     }
-    await onSave({ title: title.trim() || `Partida #${matchNumber}`, playedAt, scores })
+    await onSave({ title: title.trim() || `Partida #${matchNumber}`, playedAt, scores, correctionReason })
   }
 
   const submitImport = async (event: FormEvent) => {
     event.preventDefault()
     if (!parsed.results.length) return
+    if (new Set(parsed.results.map(result => result.gameNumber)).size > 1) return setError('Importe um número de jogo por vez para conferir a data correta de cada daily.')
     if (unassigned) return setError(parsed.results.length > 1 ? 'Diga de quem é cada resultado.' : 'Escolha quem fez esse resultado.')
     if (repeated) return setError('Dois resultados do mesmo jogo estão no mesmo jogador.')
     setError('')
-    await onImport(parsed.results.map((result, index) => ({ playerId: assignments[index], playedAt: importDate, ...result })))
+    await onImport(parsed.results.map((result, index) => ({ playerId: assignments[index], playedAt: importDate, correctionReason, ...result })))
   }
 
   const pasteFromClipboard = async () => {
@@ -98,6 +102,7 @@ export function MatchSheet({ players, matchNumber, busy, initialShareText, onClo
 
       <p className="daily-hint">Ainda não jogou? <DailyLink variant="quiet" label="Abrir a daily de hoje" /></p>
 
+      {weekClosed(weekOf(mode === 'paste' ? importDate : playedAt).from) && <label className="field correction-field"><span>Motivo da correção da semana encerrada</span><input value={correctionReason} onChange={e => setCorrectionReason(e.target.value)} minLength={5} maxLength={300} placeholder="Ex.: resultado antigo não registrado" /><small>O histórico de premiações será revisado e a correção ficará registrada.</small></label>}
       {mode === 'paste' ? (
         <form className="sheet-form" onSubmit={submitImport}>
           <div className="field paste-field">
@@ -422,6 +427,7 @@ type MatchEditSheetProps = {
 }
 
 export function MatchEditSheet({ match, busy, onClose, onSave }: MatchEditSheetProps) {
+  const [correctionReason, setCorrectionReason] = useState('')
   const [title, setTitle] = useState(match.title)
   const [playedAt, setPlayedAt] = useState(match.played_at.slice(0, 10))
   const [error, setError] = useState('')
@@ -432,7 +438,7 @@ export function MatchEditSheet({ match, busy, onClose, onSave }: MatchEditSheetP
     if (!cleanTitle) return setError('Dê um nome para a partida.')
     if (!/^\d{4}-\d{2}-\d{2}$/.test(playedAt)) return setError('Escolha uma data válida.')
     setError('')
-    await onSave({ title: cleanTitle, playedAt })
+    await onSave({ title: cleanTitle, playedAt, correctionReason })
   }
 
   return (
@@ -453,6 +459,7 @@ export function MatchEditSheet({ match, busy, onClose, onSave }: MatchEditSheetP
           <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={50} placeholder="Daily #123" />
         </label>
         {error && <p className="form-error" role="alert">{error}</p>}
+        {(weekClosed(weekOf(match.played_at).from) || weekClosed(weekOf(playedAt).from)) && <label className="field"><span>Motivo da correção</span><input required minLength={5} maxLength={300} value={correctionReason} onChange={e => setCorrectionReason(e.target.value)} placeholder="Explique o ajuste; os prêmios serão revisados" /></label>}
         <button className="primary-button primary-button--large" type="submit" disabled={busy}>
           {busy ? 'Salvando…' : 'Salvar alterações'}
         </button>
@@ -559,12 +566,12 @@ export function PlayerSheet({ player, busy, onClose, onSave, onDelete }: PlayerS
         {player && onDelete && (
           confirmDelete ? (
             <div className="delete-confirm">
-              <span>Apagar {player.nickname} e seus placares?</span>
-              <button type="button" disabled={busy} onClick={onDelete}>Sim, apagar</button>
+              <span>Arquivar {player.nickname}? Histórico e conquistas serão preservados.</span>
+              <button type="button" disabled={busy} onClick={onDelete}>Sim, arquivar</button>
               <button type="button" onClick={() => setConfirmDelete(false)}>Cancelar</button>
             </div>
           ) : (
-            <button className="danger-link" type="button" onClick={() => setConfirmDelete(true)}><Trash2 size={16} /> Remover jogador</button>
+            <button className="danger-link" type="button" onClick={() => setConfirmDelete(true)}><Trash2 size={16} /> Arquivar jogador</button>
           )
         )}
       </form>

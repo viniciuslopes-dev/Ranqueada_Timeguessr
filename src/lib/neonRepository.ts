@@ -2,6 +2,16 @@ import type { GameMatch, ImportResultInput, MatchInput, MatchUpdateInput, Player
 import { ApiError, isNeonApiEnabled, neonApi } from './api'
 import { localDaysAgo, localToday } from './period'
 import { readAccessToken, readCachedRoom, saveAccessToken, saveCachedRoom, type CachedRoom } from './roomAccess'
+import { applyProgressCommand, decoratePlayers, reconcileProgress, validDay, weekClosed, weekOf, leagueToday, type ProgressCommand } from './progression'
+
+export type ProfileIdentity = { playerId: string; profileToken: string }
+export function readProfileIdentity(roomId: string): ProfileIdentity | null {
+  try { return JSON.parse(localStorage.getItem(`cronorank:identity:${roomId}`) ?? 'null') } catch { return null }
+}
+const validateDate = (day: string, reason = '') => {
+  if (!validDay(day) || day > leagueToday()) throw new Error('Use uma data válida até hoje, no horário de Brasília.')
+  if (weekClosed(weekOf(day).from) && reason.trim().length < 5) throw new Error('Informe o motivo da correção da semana encerrada (mínimo de 5 caracteres).')
+}
 
 const DEMO_STORAGE_KEY = 'cronorank:demo-data:v1'
 const DEMO_ROOM_ID = 'demo-room'
@@ -36,6 +46,13 @@ function seedDemo(): RoomSnapshot {
     [43200, 47890, 44980, 40110],
     [48120, 46330, 47240, 44180],
   ]
+  // Histórico demonstrativo suficiente para ver taças, marcos e evolução.
+  for (let day = 27; day >= 8; day--) {
+    const index = matches.length
+    matches.push({ id: `demo-history-${day}`, room_id: DEMO_ROOM_ID, title: `Viagem de ${daysAgo(day)}`, game_number: null, played_at: daysAgo(day), created_at: new Date().toISOString() })
+    const winner = Math.floor(day / 7) % players.length
+    values[index] = players.map((_, player) => player === winner ? 47000 + day * 20 : 38000 + ((day * 641 + player * 987) % 7000))
+  }
   return {
     room: { id: DEMO_ROOM_ID, name: 'Liga dos Crononautas', invite_code: 'DEMO26', created_at: new Date().toISOString() },
     players,
@@ -76,6 +93,27 @@ export const repository = {
 
   async initialize() {},
 
+  async claimProfile(roomId: string, playerId: string, profileToken?: string): Promise<ProfileIdentity> {
+    const key = `cronorank:profile-key:${roomId}:${playerId}`
+    const savedToken = profileToken || localStorage.getItem(key) || undefined
+    const result = isNeonApiEnabled
+      ? await neonApi.claimProfile(roomId, playerId, savedToken, requireToken(roomId))
+      : { playerId, profileToken: savedToken || crypto.randomUUID() + crypto.randomUUID() }
+    localStorage.setItem(key, result.profileToken)
+    localStorage.setItem(`cronorank:identity:${roomId}`, JSON.stringify(result))
+    return result
+  },
+
+  async progressCommand(roomId: string, command: ProgressCommand) {
+    const identity = readProfileIdentity(roomId)
+    if (!identity) throw new Error('Vincule seu perfil primeiro.')
+    if (isNeonApiEnabled) return neonApi.progressCommand(roomId, identity.playerId, identity.profileToken, command, requireToken(roomId))
+    const room = await this.loadRoom(roomId)
+    room.progress = applyProgressCommand(room, identity.playerId, command)
+    saveDemoRoom(room)
+    return decoratePlayers(room)
+  },
+
   // Copia local do ultimo ranking carregado, usada quando o app abre sem rede.
   readCachedRoom(roomId: string): CachedRoom | null {
     return isNeonApiEnabled ? readCachedRoom(roomId) : null
@@ -91,7 +129,11 @@ export const repository = {
     if (!snapshot) throw new Error('Sala não encontrada neste aparelho.')
     snapshot.rounds ??= []
     snapshot.matches = snapshot.matches.map((match) => ({ ...match, game_number: match.game_number ?? null }))
-    return structuredClone(snapshot)
+    snapshot.progress = reconcileProgress(snapshot)
+    const data = getDemoData()
+    data[roomId] = snapshot
+    localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(data))
+    return decoratePlayers(structuredClone(snapshot))
   },
 
   async createRoom(name: string, nickname: string): Promise<{ roomId: string; code: string }> {
@@ -138,13 +180,19 @@ export const repository = {
   async deletePlayer(player: Player) {
     if (isNeonApiEnabled) { await neonApi.deletePlayer(player.room_id, player.id, requireToken(player.room_id)); return }
     const room = await this.loadRoom(player.room_id)
-    room.players = room.players.filter((item) => item.id !== player.id)
-    room.scores = room.scores.filter((item) => item.player_id !== player.id)
-    room.rounds = room.rounds.filter((item) => item.player_id !== player.id)
+    room.players = room.players.map((item) => item.id === player.id ? { ...item, archived: true } : item)
+    saveDemoRoom(room)
+  },
+
+  async restorePlayer(player: Player) {
+    if (isNeonApiEnabled) { await neonApi.restorePlayer(player.room_id, player.id, requireToken(player.room_id)); return }
+    const room = await this.loadRoom(player.room_id)
+    room.players = room.players.map(item => item.id === player.id ? { ...item, archived: false } : item)
     saveDemoRoom(room)
   },
 
   async addMatch(roomId: string, input: MatchInput) {
+    validateDate(input.playedAt, input.correctionReason)
     if (isNeonApiEnabled) { await neonApi.addMatch(roomId, input, requireToken(roomId)); return }
     const room = await this.loadRoom(roomId)
     const matchId = uid()
@@ -157,10 +205,12 @@ export const repository = {
   },
 
   async importResult(roomId: string, input: ImportResultInput) {
+    validateDate(input.playedAt, input.correctionReason)
     if (isNeonApiEnabled) { await neonApi.importResult(roomId, input, requireToken(roomId)); return }
     const room = await this.loadRoom(roomId)
     const createdAt = new Date().toISOString()
     let match = room.matches.find((item) => item.game_number === input.gameNumber)
+    if (match && match.played_at !== input.playedAt) throw new Error('Esse número de jogo já tem outra data. Confira a partida existente.')
     if (!match) {
       match = {
         id: uid(), room_id: roomId, title: `TimeGuessr #${input.gameNumber}`,
@@ -184,6 +234,8 @@ export const repository = {
   },
 
   async updateMatch(match: GameMatch, input: MatchUpdateInput) {
+    validateDate(match.played_at, input.correctionReason)
+    validateDate(input.playedAt, input.correctionReason)
     if (isNeonApiEnabled) { await neonApi.updateMatch(match.room_id, match.id, input, requireToken(match.room_id)); return }
     const room = await this.loadRoom(match.room_id)
     room.matches = room.matches.map((item) => item.id === match.id
@@ -192,9 +244,11 @@ export const repository = {
     saveDemoRoom(room)
   },
 
-  async deleteMatch(roomId: string, matchId: string) {
-    if (isNeonApiEnabled) { await neonApi.deleteMatch(roomId, matchId, requireToken(roomId)); return }
+  async deleteMatch(roomId: string, matchId: string, correctionReason?: string) {
+    if (isNeonApiEnabled) { await neonApi.deleteMatch(roomId, matchId, requireToken(roomId), correctionReason); return }
     const room = await this.loadRoom(roomId)
+    const match = room.matches.find(m => m.id === matchId)
+    if (match) validateDate(match.played_at, correctionReason)
     room.matches = room.matches.filter((item) => item.id !== matchId)
     room.scores = room.scores.filter((item) => item.match_id !== matchId)
     room.rounds = room.rounds.filter((item) => item.match_id !== matchId)

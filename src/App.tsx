@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, CloudOff, Download, Gamepad2, RefreshCw, Share2, Trophy, Users } from 'lucide-react'
+import { BarChart3, CloudOff, Download, Gamepad2, Medal, RefreshCw, Share2, Trophy, Users } from 'lucide-react'
 import { Onboarding, Reconnect } from './components/Onboarding'
 import { MatchDetailSheet, MatchEditSheet, MatchSheet, PeriodSheet, PlayerSheet, ShareSheet } from './components/Sheets'
 import { InsightsView, MatchesView, PeriodBar, PlayersView, RankingView } from './components/Views'
 import { getDailyStatus } from './lib/ranking'
+import { CompetitionView } from './components/Competition'
+import { leagueToday, weekClosed, weekOf } from './lib/progression'
 import { Brand, Spinner } from './components/ui'
-import { filterSnapshotByPeriod, formatPeriodLabel, isWithinRange, localToday, resolvePeriod, type Period, type PeriodPreset } from './lib/period'
-import { repository } from './lib/neonRepository'
+import { filterSnapshotByPeriod, formatPeriodLabel, isWithinRange, resolvePeriod, type Period, type PeriodPreset } from './lib/period'
+import { readProfileIdentity, repository } from './lib/neonRepository'
 import { isAccessRevoked, isTemporaryFailure } from './lib/api'
 import { clearActiveRoom, describeSavedAt, forgetRoom, readActiveRoomId, saveActiveRoomId } from './lib/roomAccess'
 import type { GameMatch, ImportResultInput, MatchInput, MatchUpdateInput, Player, RankingMetric, RoomSnapshot } from './types'
 
 const PERIOD_KEY = 'cronorank:period'
 const METRIC_KEY = 'cronorank:metric'
-type ViewName = 'ranking' | 'matches' | 'players' | 'insights'
+type ViewName = 'arena' | 'collection' | 'ranking' | 'matches' | 'players' | 'insights'
 type ModalName = 'match' | 'match-edit' | 'match-detail' | 'period' | 'player' | 'share' | null
 
 interface InstallPromptEvent extends Event {
@@ -26,19 +28,20 @@ interface InstallPromptEvent extends Event {
 function readStoredPeriod(): Period {
   try {
     const raw = localStorage.getItem(PERIOD_KEY)
-    if (!raw) return { preset: 'all' }
+    if (!raw) return { preset: 'week' }
     const saved = JSON.parse(raw) as Period
     if (saved.preset === 'custom' && saved.from && saved.to) return saved
+    if (saved.preset === 'all') return { preset: 'all' }
     if (saved.preset === 'today' || saved.preset === 'week' || saved.preset === 'month') return { preset: saved.preset }
   } catch { /* preferencia corrompida volta para o padrao */ }
-  return { preset: 'all' }
+  return { preset: 'week' }
 }
 
 // o criterio do ranking fica salvo: quem joga no modo liga nao quer reescolher
 // a cada abertura do app
 function readStoredMetric(): RankingMetric {
   const saved = localStorage.getItem(METRIC_KEY)
-  return saved === 'average' || saved === 'wins' || saved === 'league' ? saved : 'total'
+  return saved === 'average' || saved === 'wins' || saved === 'total' ? saved : 'league'
 }
 
 function readableError(error: unknown): string {
@@ -64,7 +67,8 @@ export default function App() {
   const [activeRoomId, setActiveRoomId] = useState(readActiveRoomId)
   // quando preenchido, a tela mostra a copia salva no aparelho em vez dos dados vivos
   const [cachedAt, setCachedAt] = useState<string | null>(null)
-  const [view, setView] = useState<ViewName>('ranking')
+  const [view, setView] = useState<ViewName>('arena')
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }) }, [view])
   const [metric, setMetric] = useState<RankingMetric>(readStoredMetric)
   const [modal, setModal] = useState<ModalName>(null)
   const [editingPlayer, setEditingPlayer] = useState<Player | undefined>()
@@ -84,14 +88,15 @@ export default function App() {
     window.setTimeout(() => setToast(''), 2800)
   }, [])
 
-  const range = useMemo(() => resolvePeriod(period), [period])
+  const [leagueDay, setLeagueDay] = useState(leagueToday)
+  useEffect(() => { const timer = window.setInterval(() => setLeagueDay(leagueToday()), 30000); return () => window.clearInterval(timer) }, [])
+  const range = useMemo(() => resolvePeriod(period, leagueDay), [period, leagueDay])
   const visible = useMemo(() => snapshot ? filterSnapshotByPeriod(snapshot, range) : null, [snapshot, range])
   // o quadro de hoje ignora o filtro: ele responde "quem ja lancou o de hoje?"
-  const today = useMemo(() => snapshot ? getDailyStatus(snapshot.players, snapshot.matches, snapshot.scores, localToday()) : null, [snapshot])
+  const today = useMemo(() => snapshot ? getDailyStatus(snapshot.players, snapshot.matches, snapshot.scores, leagueDay) : null, [snapshot, leagueDay])
 
   useEffect(() => {
-    if (period.preset === 'all') localStorage.removeItem(PERIOD_KEY)
-    else localStorage.setItem(PERIOD_KEY, JSON.stringify(period))
+    localStorage.setItem(PERIOD_KEY, JSON.stringify(period))
   }, [period])
 
   useEffect(() => {
@@ -146,7 +151,7 @@ export default function App() {
     setActiveRoomId(null)
     setSnapshot(null)
     setCachedAt(null)
-    setView('ranking')
+    setView('arena')
   }, [])
 
   // Abertura sem internet: em vez de pedir o codigo de novo, mostra o ultimo
@@ -313,7 +318,7 @@ export default function App() {
   }, [pendingShare, snapshot?.players.length, openModal])
 
   const openNewMatch = () => {
-    if (!snapshot?.players.length) {
+    if (!snapshot?.players.some(p => !p.archived)) {
       setView('players')
       showToast('Adicione pelo menos um jogador primeiro.')
       return
@@ -340,7 +345,7 @@ export default function App() {
   )
   const deletePlayer = async () => {
     if (!editingPlayer) return
-    await mutate(() => repository.deletePlayer(editingPlayer), 'Jogador removido.')
+    await mutate(() => repository.deletePlayer(editingPlayer), 'Jogador arquivado. Histórico e conquistas preservados.')
   }
   const updateMatch = async (input: MatchUpdateInput) => {
     if (!editingMatch) return
@@ -348,7 +353,9 @@ export default function App() {
   }
   const deleteMatch = async (match: GameMatch) => {
     if (!window.confirm(`Apagar “${match.title}” e todos os placares?`)) return
-    await mutate(() => repository.deleteMatch(match.room_id, match.id), 'Partida removida.')
+    const correctionReason = weekClosed(weekOf(match.played_at).from) ? window.prompt('Essa semana já encerrou. Informe o motivo da exclusão; os prêmios serão revisados:') : undefined
+    if (correctionReason === null) return
+    await mutate(() => repository.deleteMatch(match.room_id, match.id, correctionReason), 'Partida removida. Premiações atualizadas.')
   }
 
   const leaveRoom = () => {
@@ -413,29 +420,31 @@ export default function App() {
         <div className="demo-banner"><span>Prévia local</span><p>Os dados deste modo ficam somente neste aparelho.</p><button type="button" onClick={leaveRoom}>Conectar banco</button></div>
       )}
 
-      <PeriodBar
+      {view !== 'arena' && view !== 'collection' && <PeriodBar
         period={period}
         range={range}
         matchCount={visible!.matches.length}
         onPreset={(preset: PeriodPreset) => preset === 'custom' ? openModal('period') : setPeriod({ preset })}
         onCustom={() => openModal('period')}
-      />
+      />}
 
       <main className="app-content">
+        {(view === 'arena' || view === 'collection') && <CompetitionView key={snapshot.room.id} snapshot={snapshot} mode={view === 'arena' ? 'week' : 'collection'} onChanged={() => loadRoom(snapshot.room.id)} onLegacy={() => setView('ranking')} onNew={openNewMatch} onToast={showToast} />}
         {view === 'ranking' && <RankingView snapshot={visible!} metric={metric} onMetric={setMetric} onNewMatch={openNewMatch} filtered={!!range} onClearPeriod={clearPeriod} today={today} periodLabel={formatPeriodLabel(range)} onToast={showToast} onOpenMatch={openMatchDetail} stale={!!cachedAt} />}
         {view === 'matches' && <MatchesView snapshot={visible!} onNew={openNewMatch} onEdit={(match) => { setEditingMatch(match); openModal('match-edit') }} onDelete={deleteMatch} onOpen={openMatchDetail} filtered={!!range} onClearPeriod={clearPeriod} />}
-        {view === 'players' && <PlayersView snapshot={visible!} onAdd={() => { setEditingPlayer(undefined); openModal('player') }} onEdit={(player) => { setEditingPlayer(player); openModal('player') }} />}
+        {view === 'players' && <PlayersView snapshot={visible!} onAdd={() => { setEditingPlayer(undefined); openModal('player') }} onEdit={(player) => { setEditingPlayer(player); openModal('player') }} onRestore={player => { void mutate(() => repository.restorePlayer(player), 'Jogador de volta à disputa!') }} />}
         {view === 'insights' && <InsightsView snapshot={visible!} history={snapshot} filtered={!!range} onClearPeriod={clearPeriod} />}
       </main>
 
       <nav className="bottom-nav" aria-label="Navegação principal">
-        <NavButton active={view === 'ranking'} icon={<Trophy />} label="Ranking" onClick={() => setView('ranking')} />
+        <NavButton active={view === 'arena' || view === 'ranking'} icon={<Trophy />} label="Semana" onClick={() => setView('arena')} />
         <NavButton active={view === 'matches'} icon={<Gamepad2 />} label="Partidas" onClick={() => setView('matches')} />
+        <NavButton active={view === 'collection'} icon={<Medal />} label="Conquistas" onClick={() => setView('collection')} />
         <NavButton active={view === 'players'} icon={<Users />} label="Jogadores" onClick={() => setView('players')} />
         <NavButton active={view === 'insights'} icon={<BarChart3 />} label="Estatísticas" onClick={() => setView('insights')} />
       </nav>
 
-      {modal === 'match' && <MatchSheet players={snapshot.players} matchNumber={snapshot.matches.length + 1} busy={busy} initialShareText={pendingShare} onClose={closeModal} onSave={saveMatch} onImport={importResult} />}
+      {modal === 'match' && <MatchSheet players={snapshot.players.filter(p => !p.archived)} initialPlayerId={readProfileIdentity(snapshot.room.id)?.playerId} matchNumber={snapshot.matches.length + 1} busy={busy} initialShareText={pendingShare} onClose={closeModal} onSave={saveMatch} onImport={importResult} />}
       {modal === 'match-edit' && editingMatch && <MatchEditSheet match={editingMatch} busy={busy} onClose={closeModal} onSave={updateMatch} />}
       {modal === 'player' && <PlayerSheet player={editingPlayer} busy={busy} onClose={closeModal} onSave={savePlayer} onDelete={editingPlayer ? deletePlayer : undefined} />}
       {modal === 'share' && <ShareSheet room={snapshot.room} onClose={closeModal} onToast={showToast} onLeave={leaveRoom} />}

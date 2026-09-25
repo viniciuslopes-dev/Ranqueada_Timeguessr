@@ -376,12 +376,12 @@ function RecentMatches({ snapshot, limit, onOpen }: { snapshot: RoomSnapshot; li
   )
 }
 
-export function PlayersView({ snapshot, onAdd, onEdit }: { snapshot: RoomSnapshot; onAdd: () => void; onEdit: (player: Player) => void }) {
-  const ranking = buildRanking(snapshot.players, snapshot.matches, snapshot.scores)
+export function PlayersView({ snapshot, onAdd, onEdit, onRestore }: { snapshot: RoomSnapshot; onAdd: () => void; onEdit: (player: Player) => void; onRestore: (player: Player) => void }) {
+  const ranking = buildRanking(snapshot.players.filter(p => !p.archived), snapshot.matches, snapshot.scores)
   return (
     <div className="view-stack">
       <div className="page-title">
-        <div><span className="section-kicker">SUA TURMA</span><h1>Jogadores</h1><p>Cadastre e personalize os competidores</p></div>
+        <div><span className="section-kicker">SUA TURMA</span><h1>Jogadores</h1><p>Organize os competidores e preserve suas histórias</p></div>
         <button className="round-add" type="button" onClick={onAdd} aria-label="Adicionar jogador"><UserPlus /></button>
       </div>
       {!ranking.length ? (
@@ -408,6 +408,7 @@ export function PlayersView({ snapshot, onAdd, onEdit }: { snapshot: RoomSnapsho
           <button className="add-player-card" type="button" onClick={onAdd}><UserPlus size={24} /><strong>Novo jogador</strong><span>Adicionar à liga</span></button>
         </div>
       )}
+      {snapshot.players.some(player => player.archived) && <details className="competition-rules"><summary>Jogadores arquivados · histórico preservado</summary>{snapshot.players.filter(player => player.archived).map(player => <div className="weekly-row" key={player.id}><PlayerAvatar player={player} size="sm" /><strong className="weekly-name">{player.nickname}</strong><button className="text-button" onClick={() => onRestore(player)}>Trazer de volta</button></div>)}</details>}
     </div>
   )
 }

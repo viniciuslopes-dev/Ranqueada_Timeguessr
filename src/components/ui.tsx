@@ -28,7 +28,7 @@ export function DailyLink({ variant = 'button', label = 'Jogar a daily de hoje' 
   )
 }
 
-export function PlayerAvatar({ player, size = 'md', rank }: { player: Pick<Player, 'nickname' | 'color'>; size?: 'sm' | 'md' | 'lg' | 'xl'; rank?: number }) {
+export function PlayerAvatar({ player, size = 'md', rank }: { player: Pick<Player, 'nickname' | 'color' | 'cosmetic' | 'weeklyChampion'>; size?: 'sm' | 'md' | 'lg' | 'xl'; rank?: number }) {
   const initials = player.nickname
     .split(/\s+/)
     .slice(0, 2)
@@ -36,9 +36,9 @@ export function PlayerAvatar({ player, size = 'md', rank }: { player: Pick<Playe
     .join('')
     .toUpperCase()
   return (
-    <span className={`avatar avatar--${size}`} style={{ '--avatar-color': player.color } as React.CSSProperties} aria-label={player.nickname}>
-      {initials}
-      {rank === 1 && <span className="avatar__crown">♛</span>}
+    <span className={`avatar avatar--${size} avatar-frame--${player.cosmetic?.frame ?? 'none'}`} style={{ '--avatar-color': player.color } as React.CSSProperties} aria-label={`${player.nickname}${player.weeklyChampion ? ', campeão da última semana' : ''}`}>
+      {player.cosmetic?.avatar && player.cosmetic.avatar !== 'initials' ? player.cosmetic.avatar : initials}
+      {player.weeklyChampion ? <span className="avatar__crown weekly-champion-badge" title="Campeão da última semana">🏆</span> : rank === 1 && <span className="avatar__crown" title="Liderança do ranking consultado">♛</span>}
     </span>
   )
 }

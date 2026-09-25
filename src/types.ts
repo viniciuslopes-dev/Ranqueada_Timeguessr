@@ -4,6 +4,9 @@ export type Player = {
   nickname: string
   color: string
   created_at: string
+  archived?: boolean
+  cosmetic?: { avatar: string; frame: string; title: string; featured: string[]; theme?: string }
+  weeklyChampion?: boolean
 }
 
 export type GameMatch = {
@@ -49,20 +52,25 @@ export type RoomSnapshot = {
   matches: GameMatch[]
   scores: Score[]
   rounds: RoundDetail[]
+  progress?: import('./lib/progression').ProgressState
+  claimedPlayers?: string[]
 }
 
 export type MatchInput = {
+  correctionReason?: string
   title: string
   playedAt: string
   scores: Array<{ playerId: string; score: number }>
 }
 
 export type MatchUpdateInput = {
+  correctionReason?: string
   title: string
   playedAt: string
 }
 
 export type ImportResultInput = {
+  correctionReason?: string
   playerId: string
   gameNumber: number
   playedAt: string

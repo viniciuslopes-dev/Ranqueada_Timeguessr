@@ -138,7 +138,7 @@ npm run preview   # prévia local do build estático
 - Cada resultado importado guarda as cinco rodadas, com pontos, erro em anos e distância em quilômetros.
 - Empate no maior placar conta como vitória para todos os empatados.
 - O ranking pode ser alternado entre total, média e vitórias.
-- Apagar jogador também apaga seus placares.
+- Arquivar jogador preserva placares, conquistas e premiações. É possível trazê-lo de volta pela aba Jogadores.
 - Apagar partida também apaga todos os placares dela.
 - O código evita `0`, `1`, `I` e `O` para não gerar convites ambíguos.
 
@@ -147,3 +147,39 @@ npm run preview   # prévia local do build estático
 - Permissões exclusivas de organizador.
 - Temporadas mensais sem perder o histórico.
 - Exportação CSV e backup manual.
+
+## Campeonato semanal e conquistas
+
+A tela inicial agora é **Semana**. A competição vai de segunda a domingo, no fuso `America/Sao_Paulo`. Segunda-feira é o prazo para resultados atrasados; a premiação da semana anterior é confirmada no primeiro acesso à liga a partir de terça-feira. O fechamento é feito pela API, sem depender do relógio do aparelho ou de um agendador externo.
+
+- O campeonato usa uma partida por dia: a importada de menor número oficial; se não existir importação, a primeira manual cadastrada. Partidas extras continuam nos rankings históricos.
+- Uma partida precisa de ao menos dois participantes para pontuar na semana. A premiação exige dois dias disputados e pelo menos dois jogadores com dois dias de participação.
+- A regra inicial é 5/3/1/0. A liga pode escolher 7/5/3/2/1 (todos pontuam), e os sete dias ou os cinco melhores resultados individuais. Mudanças valem a partir da próxima segunda; cada temporada conserva suas regras.
+- Desempate: pontos de liga, vitórias e soma dos placares considerados. Empate completo compartilha a colocação e o título. O nome nunca decide um troféu.
+- O campeão da última semana encerrada recebe badge. Títulos semanais, pódios e vitórias em partidas são conceitos separados.
+- As temporadas confirmadas ficam na galeria, com compartilhamento de texto e exportação local de um cartão PNG.
+- Corrigir, importar ou excluir resultados de semanas encerradas exige um motivo. A auditoria fica em `competition_audit`; a classificação é recalculada, a temporada recebe uma revisão e conquistas que deixaram de ser válidas são retiradas. Arquivar jogadores não altera seus resultados.
+- Na importação em lote, todas as mensagens precisam ser do mesmo número de jogo, para conferir uma data por vez. Um número já cadastrado não aceita importação com data diferente: corrija a partida primeiro.
+
+O álbum oferece 16 conquistas de participação, recordes pessoais, precisão, sequências, viradas, revanche e títulos. Cada tipo é desbloqueado uma vez, com data e evidência; troféus semanais acumulam separadamente. Rodadas detalhadas são necessárias apenas para conquistas de ano, mapa e virada. As conquistas existentes são recuperadas do histórico no primeiro acesso, sem gerar dezenas de avisos retroativos.
+
+**Missões semanais** dão pequenos objetivos visíveis sem alterar a classificação. A comunicação valoriza progresso pessoal, escolha e amizade. Não há perda de coleção por ausência, recompensa aleatória, compra de vantagem ou obrigação de jogar todos os dias. A opção de cinco melhores dias permite pausas sem abandonar a disputa.
+
+## Perfil, estilo e desafios
+
+Em **Qual jogador é você?**, o participante vincula seu perfil ao aparelho. O primeiro vínculo de um perfil existente segue o modelo de confiança da sala: escolha apenas o próprio nick. Depois disso, a API exige uma chave privada para personalizar ou aceitar convites; entrar com o código da sala não permite assumir um perfil já vinculado.
+
+Guarde a chave por **Jogando como → Levar meu perfil para outro aparelho**. Para recuperar, entre na mesma sala, selecione o jogador e cole sua chave. Apenas o hash da chave fica em `player_identity`; a chave não é retornada no snapshot da sala. Não existe recuperação por e-mail. O cadastro e as correções de placares continuam colaborativos, como antes.
+
+- Avatares, três fundos de cartão, títulos conquistados, três conquistas em destaque e molduras desbloqueadas por progresso.
+- Configurações da liga: nome, emblema, tom do mural e regras da semana seguinte. Qualquer perfil vinculado pode ajustar, conforme combinado pelo grupo.
+- Desafios precisam do aceite do destinatário. Contam as próximas cinco partidas diárias em comum dentro de 14 dias; partidas já lançadas por um dos dois antes do aceite não entram. Empates ocupam uma partida, ausências não contam como derrota. No prazo, vence quem somou mais vitórias nos confrontos realizados; sem jogos não há vencedor.
+- Confrontos e álbuns usam o histórico completo, independentemente do filtro das outras abas.
+
+## Persistência e implantação da evolução
+
+A API aplica automaticamente a migração aditiva de `players.archived`, `room_progress`, `player_identity` e `competition_audit`. O mesmo SQL está em `neon/schema.sql` para implantação manual. Não são necessárias novas variáveis de ambiente. O usuário do banco precisa poder criar tabelas e adicionar colunas, como já ocorria na migração de rodadas.
+
+`room_progress` guarda temporadas, conquistas, estilos, desafios e versões de regras em JSONB. Leituras usam snapshot consistente e gravações com comparação de revisão; alterações de partidas incrementam a revisão na mesma transação que os placares e a auditoria. Uma concorrência força nova leitura em vez de sobrescrever recompensas ou preferências. O modo local usa o mesmo motor de regras e persiste no navegador; a identidade nesse modo é apenas demonstrativa.
+
+Validação: `npm test` cobre o motor competitivo, correções, identidade, validações da API e concorrência. `npm run build` verifica TypeScript do cliente e das Functions e gera o PWA. Os testes de API usam um banco simulado; a migração deve ser acompanhada no primeiro acesso ao ambiente publicado.

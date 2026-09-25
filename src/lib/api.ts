@@ -1,4 +1,5 @@
 import type { ImportResultInput, MatchInput, MatchUpdateInput, RoomSnapshot } from '../types'
+import type { ProgressCommand } from './progression'
 
 type ApiPayload = Record<string, unknown>
 
@@ -58,6 +59,10 @@ export async function apiRequest<T>(action: string, payload: ApiPayload = {}, ac
 }
 
 export const neonApi = {
+  claimProfile: (roomId: string, playerId: string, profileToken: string | undefined, token: string) =>
+    apiRequest<{ playerId: string; profileToken: string }>('claim_profile', { roomId, playerId, profileToken }, token),
+  progressCommand: (roomId: string, playerId: string, profileToken: string, command: ProgressCommand, token: string) =>
+    apiRequest<RoomSnapshot>('progress_command', { roomId, playerId, profileToken, command }, token),
   createRoom: (name: string, nickname: string) =>
     apiRequest<RoomAccess>('create_room', { name, nickname }),
   joinRoom: (code: string, nickname: string) =>
@@ -70,12 +75,14 @@ export const neonApi = {
     apiRequest<{ ok: true }>('update_player', { roomId, playerId, nickname, color }, token),
   deletePlayer: (roomId: string, playerId: string, token: string) =>
     apiRequest<{ ok: true }>('delete_player', { roomId, playerId }, token),
+  restorePlayer: (roomId: string, playerId: string, token: string) =>
+    apiRequest<{ ok: true }>('restore_player', { roomId, playerId }, token),
   addMatch: (roomId: string, input: MatchInput, token: string) =>
     apiRequest<{ ok: true }>('add_match', { roomId, ...input }, token),
   importResult: (roomId: string, input: ImportResultInput, token: string) =>
     apiRequest<{ ok: true; matchId: string; created: boolean }>('import_result', { roomId, ...input }, token),
   updateMatch: (roomId: string, matchId: string, input: MatchUpdateInput, token: string) =>
     apiRequest<{ ok: true }>('update_match', { roomId, matchId, ...input }, token),
-  deleteMatch: (roomId: string, matchId: string, token: string) =>
-    apiRequest<{ ok: true }>('delete_match', { roomId, matchId }, token),
+  deleteMatch: (roomId: string, matchId: string, token: string, correctionReason?: string) =>
+    apiRequest<{ ok: true }>('delete_match', { roomId, matchId, correctionReason }, token),
 }

@@ -69,3 +69,24 @@ create index if not exists round_details_player_idx on round_details(player_id);
 
 comment on column rooms.access_token is
   'Token privado da sala. Nunca retornar em consultas públicas nem colocar no código do front-end.';
+
+-- Evolução semanal: migração aditiva, também aplicada pela API.
+alter table players add column if not exists archived boolean not null default false;
+create table if not exists room_progress (
+  room_id uuid primary key references rooms(id) on delete cascade,
+  revision integer not null default 0,
+  state jsonb not null default '{}'::jsonb
+);
+create table if not exists player_identity (
+  player_id uuid primary key references players(id) on delete cascade,
+  room_id uuid not null references rooms(id) on delete cascade,
+  token_hash text not null,
+  created_at timestamptz not null default now()
+);
+create table if not exists competition_audit (
+  id bigint generated always as identity primary key,
+  room_id uuid not null references rooms(id) on delete cascade,
+  action text not null,
+  detail jsonb not null,
+  created_at timestamptz not null default now()
+);
