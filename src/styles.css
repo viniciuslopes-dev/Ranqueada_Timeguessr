@@ -633,9 +633,9 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .detail-empty strong { font-size: 11px; }.detail-empty p { margin-top: 3px; color: var(--muted); font-size: 9px; }
 
 /* Sheets */
-.sheet-backdrop { position: fixed; z-index: 100; inset: 0; padding-top: 45px; display: flex; align-items: flex-end; justify-content: center; background: rgba(9, 16, 34, .58); backdrop-filter: blur(5px); animation: fade-in .2s ease; }
+.sheet-backdrop { position: fixed; z-index: 100; inset: 0; height: 100vh; height: 100dvh; padding-top: max(35px, env(safe-area-inset-top)); display: flex; align-items: flex-end; justify-content: center; background: rgba(9, 16, 34, .58); backdrop-filter: blur(5px); animation: fade-in .2s ease; }
 @keyframes fade-in { from { opacity: 0; } }
-.sheet { width: min(100%, 620px); max-height: calc(100vh - 35px); overflow-y: auto; overscroll-behavior: contain; padding: 7px 21px max(24px, env(safe-area-inset-bottom)); background: #fbfaf7; border-radius: 26px 26px 0 0; box-shadow: 0 -20px 70px rgba(4, 10, 25, .25); animation: sheet-up .28s cubic-bezier(.22,.8,.34,1) both; }
+.sheet { width: min(100%, 620px); max-height: calc(100vh - max(35px, env(safe-area-inset-top))); max-height: calc(100dvh - max(35px, env(safe-area-inset-top))); overflow-y: auto; overscroll-behavior: contain; padding: 7px 21px max(24px, env(safe-area-inset-bottom)); background: #fbfaf7; border-radius: 26px 26px 0 0; box-shadow: 0 -20px 70px rgba(4, 10, 25, .25); animation: sheet-up .28s cubic-bezier(.22,.8,.34,1) both; }
 @keyframes sheet-up { from { transform: translateY(35px); opacity: .5; } }
 .sheet__handle { width: 38px; height: 4px; margin: 2px auto 14px; border-radius: 99px; background: #d5d1ca; }
 .sheet__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }

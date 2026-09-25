@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { ExternalLink, Globe2, Trophy } from 'lucide-react'
 import { TIMEGUESSR_DAILY_URL } from '../lib/timeguessr'
 import type { Player } from '../types'
@@ -44,7 +45,16 @@ export function PlayerAvatar({ player, size = 'md', rank }: { player: Pick<Playe
 }
 
 export function Sheet({ title, subtitle, onClose, children }: { title: string; subtitle?: string; onClose: () => void; children: ReactNode }) {
-  return (
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [])
+
+  // A folha precisa viver diretamente no body. Se ficar dentro de uma view
+  // animada com transform, position: fixed passa a usar a altura daquela view
+  // como referência e, em páginas longas, o conteúdo aparece só no final.
+  return createPortal(
     <div className="sheet-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
         <div className="sheet__handle" />
@@ -57,7 +67,8 @@ export function Sheet({ title, subtitle, onClose, children }: { title: string; s
         </header>
         {children}
       </section>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
