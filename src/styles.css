@@ -478,7 +478,7 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .chart-mode button { padding: 0 2px; white-space: nowrap; }
 
 
-.profile-picker { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 3px; margin-bottom: 11px; scrollbar-width: none; }
+.profile-picker { min-width: 0; display: flex; gap: 7px; overflow-x: auto; padding-bottom: 3px; margin-bottom: 11px; scrollbar-width: none; }
 .profile-picker::-webkit-scrollbar { display: none; }
 .profile-picker button { flex: 0 0 auto; min-height: 40px; padding: 5px 12px 5px 6px; display: flex; align-items: center; gap: 7px; border: 1px solid #dfddd7; border-radius: 99px; color: var(--navy); background: #fff; font-size: 10px; font-weight: 800; cursor: pointer; }
 .profile-picker button.active { border-color: var(--navy); background: var(--navy); color: #fff; }
@@ -558,12 +558,12 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .detail-precision span { display: flex; align-items: center; gap: 4px; color: #667287; font-size: 9px; white-space: nowrap; }
 .detail-precision svg { color: #8b94a3; }
 
-.import-batch { display: grid; gap: 11px; }
-.import-batch article { padding: 11px 12px; border: 1px solid #e2dfd8; border-radius: 15px; background: #fff; }
+.import-batch { min-width: 0; display: grid; gap: 11px; }
+.import-batch article { min-width: 0; padding: 11px 12px; border: 1px solid #e2dfd8; border-radius: 15px; background: #fff; }
 .import-batch header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
 .import-batch header span { display: inline-flex; align-items: center; gap: 5px; color: #24765f; font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .import-batch header strong { font-family: 'Space Grotesk', sans-serif; font-size: 12px; }
-.import-batch .profile-picker { margin-bottom: 0; }
+.import-batch .import-player-list { margin-bottom: 0; }
 
 .streak-card { display: grid; gap: 2px; padding: 6px 14px; border: 1px solid #e6e3dc; border-radius: 19px; background: #fff; }
 .streak-card article { min-height: 47px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px; border-bottom: 1px solid #f2f0ea; }
@@ -642,7 +642,8 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .sheet__header h2 { font-size: 23px; letter-spacing: -.04em; }
 .sheet__header p { margin-top: 3px; color: var(--muted); font-size: 10px; }
 .sheet__header .icon-button { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 12px; color: #7c8697; background: #efede7; font-size: 25px; line-height: 1; }
-.sheet-form { display: grid; gap: 17px; }
+.sheet-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 17px; }
+.sheet-form > * { min-width: 0; }
 .entry-mode { margin-bottom: 18px; }
 .entry-mode button { display: flex; align-items: center; justify-content: center; gap: 7px; }
 .paste-field textarea { width: 100%; min-height: 148px; resize: vertical; border: 1px solid #d9d7d1; border-radius: 14px; padding: 13px 14px; color: var(--navy); background: #fff; font-size: 11px; line-height: 1.55; }
@@ -665,7 +666,7 @@ h1, h2, h3, .brand, .rank-row__value strong, .podium strong { font-family: 'Spac
 .round-preview span { display: flex; align-items: center; gap: 3px; color: #526277; font-size: 8px; white-space: nowrap; }
 .round-preview span svg { color: #7b8799; }
 .import-assignment { display: grid; gap: 9px; }
-.import-player-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.import-player-list { min-width: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr)); gap: 7px; }
 .import-player-list button { min-width: 0; min-height: 51px; padding: 7px 9px; display: flex; align-items: center; gap: 8px; border: 1px solid #dfddd7; border-radius: 13px; color: var(--navy); background: #fff; cursor: pointer; }
 .import-player-list button > span:not(.avatar) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 800; }
 .import-player-list button i { width: 18px; height: 18px; margin-left: auto; display: grid; place-items: center; border: 1px solid #d3d3cf; border-radius: 50%; color: #fff; background: #fff; }
