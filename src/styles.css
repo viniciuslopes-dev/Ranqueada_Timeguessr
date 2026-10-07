@@ -174,6 +174,19 @@
 .unlock-banner p { font-size: 12px; margin-top: 5px; color: #806b92; }
 .unlock-banner button { border: 0; background: none; font-size: 25px; min-width: 40px; min-height: 40px; cursor: pointer; }
 @keyframes unlock-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.urna-banner { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; background: #fff0ee; border-color: #f0b6ad; }
+.urna-banner p { color: #8a4b45; line-height: 1.5; }
+.urna-screen { display: grid; place-items: center; gap: 5px; min-width: 78px; min-height: 64px; padding: 8px; border: 2px solid #b5bfae; border-radius: 8px; background: #e2e8da; color: #1d2318; font-family: ui-monospace, Consolas, monospace; }
+.urna-screen small { font-size: 7px; font-weight: 700; letter-spacing: .06em; }
+.urna-screen span { display: flex; gap: 4px; }
+.urna-screen b { display: grid; place-items: center; width: 22px; height: 28px; border: 1.5px solid #1d2318; background: #f4f7ef; font-size: 18px; }
+.urna-banner .urna-screen strong { font-size: 24px; letter-spacing: .12em; }
+.urna-keys { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; }
+.unlock-banner .urna-key { min-height: 40px; padding: 0 16px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: .05em; color: #141414; box-shadow: inset 0 -3px 0 #00000026; }
+.unlock-banner .urna-key--fix { background: #f39233; }
+.unlock-banner .urna-key--confirm { background: #3fb35c; }
+.badge-card--fazueli.badge-card--earned { border-color: #efb3ab; background: linear-gradient(145deg, #fff0ee, #fffaf0); }
+.badge-card--fazueli.badge-card--earned .badge-icon { filter: hue-rotate(-50deg) saturate(2); }
 @media (max-width: 600px) {
   .season-hero { padding: 22px 19px; grid-template-columns: minmax(0, 1fr) 85px; }
   .season-hero > .trophy-art { width: 110px; max-width: none; transform: translateX(-10px); }
@@ -828,3 +841,5 @@ button:disabled { cursor: wait; }
 
 .collection-hero.card-theme--forest { background: linear-gradient(135deg, #173d37, #34594a); }
 .collection-hero.card-theme--dusk { background: linear-gradient(135deg, #3b294d, #8a4d52); }
+.collection-hero.card-theme--red { background: linear-gradient(135deg, #5c0d19, #a8222b); }
+.collection-hero.card-theme--red p { color: #f6d8d4; }

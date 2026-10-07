@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Check, ChevronRight, Download, LockKeyhole, Settings2, Share2, Sparkles, Swords, Trophy } from 'lucide-react'
+import { ChevronRight, Download, Settings2, Share2, Sparkles, Swords, Trophy } from 'lucide-react'
 import type { RoomSnapshot } from '../types'
 import {
   ACHIEVEMENTS,
-  achievementProgress,
   AVATARS,
   challengeResult,
   DEFAULT_COSMETIC,
@@ -26,6 +25,7 @@ import { buildHeadToHead, formatShortDate } from '../lib/ranking'
 import { readProfileIdentity, repository } from '../lib/neonRepository'
 import { DailyLink, PlayerAvatar, Sheet } from './ui'
 import { downloadSeasonCard } from '../lib/seasonCard'
+import { AchievementAlbum } from './AchievementAlbum'
 
 export function TrophyArt({ medal = 1, small = false }: { medal?: number; small?: boolean }) {
   const gold = medal === 1 ? '#f7cc67' : medal === 2 ? '#d7e5f2' : '#e4a67d'
@@ -79,7 +79,6 @@ export function CompetitionView({ snapshot, mode, onChanged, onLegacy, onNew, on
   const [error, setError] = useState('')
   const [restore, setRestore] = useState('')
   const [claimPlayer, setClaimPlayer] = useState(me?.id ?? active[0]?.id ?? '')
-  const [celebration, setCelebration] = useState<string[]>([])
 
   useEffect(() => {
     if (!panel) {
@@ -91,23 +90,6 @@ export function CompetitionView({ snapshot, mode, onChanged, onLegacy, onNew, on
     window.addEventListener('popstate', closeOnBack)
     return () => window.removeEventListener('popstate', closeOnBack)
   }, [panel])
-
-  useEffect(() => {
-    if (!me) return
-    const key = `cronorank:seen-achievements:${snapshot.room.id}:${me.id}`
-    const codes = state.earned.filter((e) => e.playerId === me.id).map((e) => e.code)
-    let seen: string[] | null = null
-    try {
-      seen = JSON.parse(localStorage.getItem(key) ?? 'null')
-    } catch {
-      /* lista reiniciada */
-    }
-    if (seen) {
-      const fresh = codes.filter((c) => !seen!.includes(c))
-      if (fresh.length) setCelebration(fresh)
-    }
-    localStorage.setItem(key, JSON.stringify(codes))
-  }, [state.earned, me?.id, snapshot.room.id])
 
   const run = async (task: () => Promise<unknown>, success: string) => {
     setBusy(true)
@@ -164,11 +146,6 @@ export function CompetitionView({ snapshot, mode, onChanged, onLegacy, onNew, on
   const earned = state.earned.filter((e) => e.playerId === selectedPlayer?.id)
   const trophies = playerTrophies(state, selectedPlayer?.id ?? '')
   const ownCollection = me?.id === selectedPlayer?.id
-  const nextUnlock = ACHIEVEMENTS.filter((a) => !earned.some((e) => e.code === a.code)).sort(
-    (a, b) =>
-      achievementProgress(snapshot, selectedPlayer?.id ?? '', b.code) / b.goal -
-      achievementProgress(snapshot, selectedPlayer?.id ?? '', a.code) / a.goal,
-  )[0]
 
   return (
     <div className="view-stack competition">
@@ -212,19 +189,6 @@ export function CompetitionView({ snapshot, mode, onChanged, onLegacy, onNew, on
           {error}
         </p>
       )}
-      {celebration.length > 0 && (
-        <div className="unlock-banner" role="status">
-          <Sparkles />
-          <div>
-            <strong>Olha o que você conquistou!</strong>
-            <p>{celebration.map((code) => ACHIEVEMENTS.find((a) => a.code === code)?.name).join(' · ')}</p>
-          </div>
-          <button onClick={() => setCelebration([])} aria-label="Fechar celebração">
-            ×
-          </button>
-        </div>
-      )}
-
       {mode === 'week' ? (
         <>
           <section className="season-hero">
@@ -734,6 +698,14 @@ export function CompetitionView({ snapshot, mode, onChanged, onLegacy, onNew, on
                   <span>✨ conquistas</span>
                 </div>
               </div>
+              <AchievementAlbum
+                key={selectedPlayer.id}
+                snapshot={snapshot}
+                playerId={selectedPlayer.id}
+                own={ownCollection}
+                onCustomize={() => setPanel('profile')}
+                onNew={onNew}
+              />
               <section>
                 <div className="section-heading">
                   <div>
@@ -769,67 +741,6 @@ export function CompetitionView({ snapshot, mode, onChanged, onLegacy, onNew, on
                       </div>
                     </div>
                   )}
-                </div>
-              </section>
-              {nextUnlock && (
-                <section className="personal-nudge">
-                  <span>UMA CONQUISTA AO SEU ALCANCE</span>
-                  <strong>
-                    {nextUnlock.icon} {nextUnlock.name}
-                  </strong>
-                  <p>{nextUnlock.description}</p>
-                  <progress
-                    value={achievementProgress(snapshot, selectedPlayer.id, nextUnlock.code)}
-                    max={nextUnlock.goal}
-                    aria-label={`Progresso de ${nextUnlock.name}`}
-                  />
-                </section>
-              )}
-              <section>
-                <div className="section-heading">
-                  <div>
-                    <span className="section-kicker">PARTICIPAÇÃO · PRECISÃO · AMIZADE</span>
-                    <h2>Álbum de conquistas</h2>
-                  </div>
-                </div>
-                <div className="badge-grid">
-                  {ACHIEVEMENTS.map((a) => {
-                    const unlocked = earned.find((e) => e.code === a.code)
-                    const progress = achievementProgress(snapshot, selectedPlayer.id, a.code)
-                    return (
-                      <article
-                        className={`badge-card badge-card--${a.rarity === 'épica' ? 'epic' : a.rarity === 'rara' ? 'rare' : 'common'} ${unlocked ? 'badge-card--earned' : ''}`}
-                        key={a.code}
-                      >
-                        <div className="badge-card__top">
-                          <span className="badge-icon">{a.icon}</span>
-                          <span className="badge-rarity">
-                            {unlocked ? <Check size={12} /> : <LockKeyhole size={12} />}
-                            {a.rarity}
-                          </span>
-                        </div>
-                        <h3>{a.name}</h3>
-                        <p>{a.description}</p>
-                        {unlocked ? (
-                          <div className="badge-proof">
-                            <strong>Conquistada em {formatShortDate(unlocked.date)}</strong>
-                            <span>{unlocked.evidence}</span>
-                          </div>
-                        ) : (
-                          <>
-                            <progress
-                              value={Math.min(progress, a.goal)}
-                              max={a.goal}
-                              aria-label={`Progresso de ${a.name}`}
-                            />
-                            <small>
-                              {Math.min(progress, a.goal)}/{a.goal} · ainda há história pela frente
-                            </small>
-                          </>
-                        )}
-                      </article>
-                    )
-                  })}
                 </div>
               </section>
             </>
@@ -925,6 +836,81 @@ export function CompetitionView({ snapshot, mode, onChanged, onLegacy, onNew, on
           onSave={(cmd) => command(cmd, 'Preferências salvas. Novas regras valem na próxima semana.')}
         />
       )}
+    </div>
+  )
+}
+
+// O "piriri" da urna: bipes curtos alternados e um último mais longo.
+function playUrnaChime() {
+  if (typeof AudioContext === 'undefined') return
+  try {
+    const ctx = new AudioContext()
+    const volume = ctx.createGain()
+    volume.gain.value = 0.05
+    volume.connect(ctx.destination)
+    const beeps = [0, 1, 2, 3, 4, 5].map((i) => ({ frequency: i % 2 ? 1700 : 2100, at: i * 0.075, length: 0.06 }))
+    for (const beep of [...beeps, { frequency: 2100, at: 0.5, length: 0.35 }]) {
+      const tone = ctx.createOscillator()
+      tone.type = 'square'
+      tone.frequency.value = beep.frequency
+      tone.connect(volume)
+      tone.start(ctx.currentTime + beep.at)
+      tone.stop(ctx.currentTime + beep.at + beep.length)
+    }
+    window.setTimeout(() => void ctx.close(), 1200)
+  } catch {
+    /* sem áudio, a urna confirma só na tela */
+  }
+}
+
+// 13 é o número na urna: a comemoração do Fazueli pede CONFIRMA e não aceita CORRIGE.
+export function FazueliBanner({ others, onClose }: { others: string[]; onClose: () => void }) {
+  const [vote, setVote] = useState<'open' | 'confirmed' | 'recount'>('open')
+  const also = others.map((code) => ACHIEVEMENTS.find((a) => a.code === code)?.name).join(' · ')
+  return (
+    <div className="unlock-banner urna-banner" role="status">
+      <div className="urna-screen" aria-hidden="true">
+        {vote === 'confirmed' ? (
+          <strong>FIM</strong>
+        ) : (
+          <>
+            <small>VITÓRIAS SEGUIDAS</small>
+            <span>
+              <b>1</b>
+              <b>3</b>
+            </span>
+          </>
+        )}
+      </div>
+      <div>
+        <strong>Faz o L! Você agora é Fazueli ⭐</strong>
+        <p>
+          {vote === 'confirmed'
+            ? 'Voto computado. O fundo Onda vermelha já está liberado em Personalizar.'
+            : vote === 'recount'
+              ? 'Sem recontagem: as 13 vitórias já foram apuradas.'
+              : '13 vitórias seguidas, eleito sem segundo turno. Confirma?'}
+          {also && ` E ainda: ${also}.`}
+        </p>
+      </div>
+      <button onClick={onClose} aria-label="Fechar celebração">
+        ×
+      </button>
+      <div className="urna-keys">
+        <button type="button" className="urna-key urna-key--fix" onClick={() => setVote('recount')}>
+          CORRIGE
+        </button>
+        <button
+          type="button"
+          className="urna-key urna-key--confirm"
+          onClick={() => {
+            playUrnaChime()
+            setVote('confirmed')
+          }}
+        >
+          CONFIRMA
+        </button>
+      </div>
     </div>
   )
 }
@@ -1042,11 +1028,16 @@ function Customization({
             value={profile.theme ?? 'navy'}
             onChange={(e) => setProfile({ ...profile, theme: e.target.value })}
           >
-            {THEMES.map((theme) => (
-              <option key={theme.id} value={theme.id}>
-                {theme.name}
-              </option>
-            ))}
+            {THEMES.map((theme) => {
+              const locked = !!theme.achievement && !earned.some((e) => e.code === theme.achievement)
+              return (
+                <option key={theme.id} value={theme.id} disabled={locked}>
+                  {locked
+                    ? `🔒 ${theme.name} · exclusivo do selo ${ACHIEVEMENTS.find((a) => a.code === theme.achievement)?.name}`
+                    : theme.name}
+                </option>
+              )
+            })}
           </select>
         </label>
         <label className="field">

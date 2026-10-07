@@ -166,7 +166,13 @@ A tela inicial agora é **Semana**. A competição vai de segunda a domingo, no 
 - Corrigir, importar ou excluir resultados de semanas encerradas exige um motivo. A auditoria fica em `competition_audit`; a classificação é recalculada, a temporada recebe uma revisão e conquistas que deixaram de ser válidas são retiradas. Arquivar jogadores não altera seus resultados.
 - Na importação em lote, todas as mensagens precisam ser do mesmo número de jogo, para conferir uma data por vez. Um número já cadastrado não aceita importação com data diferente: corrija a partida primeiro.
 
-O álbum oferece 16 conquistas de participação, recordes pessoais, precisão, sequências, viradas, revanche e títulos. Cada tipo é desbloqueado uma vez, com data e evidência; troféus semanais acumulam separadamente. Rodadas detalhadas são necessárias apenas para conquistas de ano, mapa e virada. As conquistas existentes são recuperadas do histórico no primeiro acesso, sem gerar dezenas de avisos retroativos.
+O álbum oferece 22 conquistas de participação, recordes pessoais, precisão, sequências, viradas, revanche e títulos. Cada tipo é desbloqueado uma vez, com data e evidência; troféus semanais acumulam separadamente. Rodadas detalhadas são necessárias para conquistas de ano, mapa, virada, rodada perfeita e cinco anos exatos. As conquistas existentes são recuperadas do histórico no primeiro acesso, sem gerar dezenas de avisos retroativos.
+
+O álbum mostra o percentual da coleção, as próximas metas, a próxima moldura e filtros por estado e categoria. Cada selo abre os requisitos, o progresso, a evidência e a recompensa de perfil. Os novos marcos são **Bagagem de histórias** (10 dias), **Cidadão do mundo** (50 dias), **Entre as estrelas** (45.000 pontos), **Rodada de ouro** (10.000 em uma rodada) e **Memória do tempo** (os cinco anos exatos na mesma partida). Os dias de participação não precisam ser consecutivos.
+
+Desbloqueios aparecem em qualquer aba após fechar o lançamento do resultado, com revelação de selos em sequência e confetes que respeitam a preferência por menos movimento. O aviso só é marcado como visto ao ser dispensado; recarregar conserva as comemorações pendentes. O histórico de avisos é local ao aparelho e separado por liga e perfil.
+
+A épica **Fazueli** pede 13 vitórias seguidas em partidas disputadas: ausências não quebram a sequência, uma derrota zera. A comemoração imita a urna eletrônica (CONFIRMA toca o bipe, CORRIGE não tem recontagem) e o selo libera o fundo de cartão exclusivo **Onda vermelha**. Se uma correção derrubar a sequência, o selo e o fundo voltam a ficar bloqueados.
 
 **Missões semanais** dão pequenos objetivos visíveis sem alterar a classificação. A comunicação valoriza progresso pessoal, escolha e amizade. Não há perda de coleção por ausência, recompensa aleatória, compra de vantagem ou obrigação de jogar todos os dias. A opção de cinco melhores dias permite pausas sem abandonar a disputa.
 
@@ -176,7 +182,7 @@ Quem cria a liga, ou entra nela com um nick, já sai com esse perfil vinculado a
 
 Guarde a chave por **Jogando como → Levar meu perfil para outro aparelho**. Para recuperar, entre na mesma sala, selecione o jogador e cole sua chave. Apenas o hash da chave fica em `player_identity`; a chave não é retornada no snapshot da sala. Não existe recuperação por e-mail. O cadastro e as correções de placares continuam colaborativos, como antes.
 
-- Avatares, três fundos de cartão, títulos conquistados, três conquistas em destaque e molduras desbloqueadas por progresso.
+- Avatares, três fundos de cartão (mais o Onda vermelha, exclusivo do selo Fazueli), títulos conquistados, três conquistas em destaque e molduras desbloqueadas por progresso.
 - Configurações da liga: nome, emblema, tom do mural e regras da semana seguinte. Qualquer perfil vinculado pode ajustar, conforme combinado pelo grupo.
 - Desafios precisam do aceite do destinatário. Contam as próximas cinco partidas diárias em comum dentro de 14 dias; partidas já lançadas por um dos dois antes do aceite não entram. Empates ocupam uma partida, ausências não contam como derrota. No prazo, vence quem somou mais vitórias nos confrontos realizados; sem jogos não há vencedor.
 - Confrontos e álbuns usam o histórico completo, independentemente do filtro das outras abas.

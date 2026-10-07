@@ -5,6 +5,7 @@ import { MatchDetailSheet, MatchEditSheet, MatchSheet, PeriodSheet, PlayerSheet,
 import { InsightsView, MatchesView, PeriodBar, PlayersView, RankingView } from './components/Views'
 import { getDailyStatus } from './lib/ranking'
 import { CompetitionView } from './components/Competition'
+import { AchievementCelebration } from './components/AchievementCelebration'
 import { leagueToday, weekClosed, weekOf } from './lib/progression'
 import { Brand, Spinner } from './components/ui'
 import { filterSnapshotByPeriod, formatPeriodLabel, isWithinRange, resolvePeriod, type Period, type PeriodPreset } from './lib/period'
@@ -68,6 +69,7 @@ export default function App() {
   // quando preenchido, a tela mostra a copia salva no aparelho em vez dos dados vivos
   const [cachedAt, setCachedAt] = useState<string | null>(null)
   const [view, setView] = useState<ViewName>('arena')
+  const [albumVisit, setAlbumVisit] = useState(0)
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }) }, [view])
   const [metric, setMetric] = useState<RankingMetric>(readStoredMetric)
   const [modal, setModal] = useState<ModalName>(null)
@@ -445,7 +447,7 @@ export default function App() {
       />}
 
       <main className="app-content">
-        {(view === 'arena' || view === 'collection') && <CompetitionView key={snapshot.room.id} snapshot={snapshot} mode={view === 'arena' ? 'week' : 'collection'} onChanged={() => loadRoom(snapshot.room.id)} onLegacy={() => setView('ranking')} onNew={openNewMatch} onToast={showToast} />}
+        {(view === 'arena' || view === 'collection') && <CompetitionView key={`${snapshot.room.id}:${albumVisit}`} snapshot={snapshot} mode={view === 'arena' ? 'week' : 'collection'} onChanged={() => loadRoom(snapshot.room.id)} onLegacy={() => setView('ranking')} onNew={openNewMatch} onToast={showToast} />}
         {view === 'ranking' && <RankingView snapshot={visible!} metric={metric} onMetric={setMetric} onNewMatch={openNewMatch} filtered={!!range} onClearPeriod={clearPeriod} today={today} periodLabel={formatPeriodLabel(range)} onToast={showToast} onOpenMatch={openMatchDetail} stale={!!cachedAt} />}
         {view === 'matches' && <MatchesView snapshot={visible!} onNew={openNewMatch} onEdit={(match) => { setEditingMatch(match); openModal('match-edit') }} onDelete={deleteMatch} onOpen={openMatchDetail} filtered={!!range} onClearPeriod={clearPeriod} />}
         {view === 'players' && <PlayersView snapshot={visible!} onAdd={() => { setEditingPlayer(undefined); openModal('player') }} onEdit={(player) => { setEditingPlayer(player); openModal('player') }} onRestore={player => { void mutate(() => repository.restorePlayer(player), 'Jogador de volta à disputa!') }} />}
@@ -468,6 +470,7 @@ export default function App() {
         <MatchDetailSheet match={detailMatch} players={snapshot.players} scores={snapshot.scores} rounds={snapshot.rounds ?? []} onClose={closeModal} />
       )}
       {modal === 'period' && <PeriodSheet period={period} onClose={closeModal} onSave={(chosen) => { setPeriod(chosen); closeModal() }} />}
+      <AchievementCelebration snapshot={snapshot} paused={!!modal || !!cachedAt} onAlbum={() => { setAlbumVisit((v) => v + 1); setView('collection') }} />
       {toast && <div className="toast" role="status"><RefreshCw size={16} /> {toast}</div>}
     </div>
   )

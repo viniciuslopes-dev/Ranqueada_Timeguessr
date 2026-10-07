@@ -83,6 +83,7 @@ export const THEMES = [
   { id: 'navy', name: 'Céu noturno' },
   { id: 'forest', name: 'Expedição' },
   { id: 'dusk', name: 'Pôr do sol' },
+  { id: 'red', name: 'Onda vermelha', achievement: 'fazueli' },
 ]
 export const FRAMES = [
   { id: 'none', name: 'Essencial', need: 0 },
@@ -175,6 +176,15 @@ export const ACHIEVEMENTS = [
     goal: 3,
   },
   {
+    code: 'fazueli',
+    icon: '⭐',
+    name: 'Fazueli',
+    description:
+      'Vença 13 partidas disputadas seguidas e faça o L. Ausências não apagam a sequência; uma derrota leva ao segundo turno.',
+    rarity: 'épica',
+    goal: 13,
+  },
+  {
     code: 'year',
     icon: '🎯',
     name: 'Na mosca',
@@ -196,7 +206,7 @@ export const ACHIEVEMENTS = [
     name: 'Viagem perfeita',
     description: 'Faça 50.000 pontos em uma partida.',
     rarity: 'épica',
-    goal: 1,
+    goal: 50000,
   },
   {
     code: 'revenge',
@@ -245,6 +255,46 @@ export const ACHIEVEMENTS = [
     description: 'Conquiste três semanas consecutivas.',
     rarity: 'épica',
     goal: 3,
+  },
+  {
+    code: 'traveler',
+    icon: '🎒',
+    name: 'Bagagem de histórias',
+    description: 'Jogue em 10 dias diferentes. Cada viagem conta, no seu ritmo.',
+    rarity: 'comum',
+    goal: 10,
+  },
+  {
+    code: 'veteran',
+    icon: '🗺️',
+    name: 'Cidadão do mundo',
+    description: 'Jogue em 50 dias diferentes no histórico.',
+    rarity: 'épica',
+    goal: 50,
+  },
+  {
+    code: 'highscore',
+    icon: '🌠',
+    name: 'Entre as estrelas',
+    description: 'Alcance pelo menos 45.000 pontos em uma partida.',
+    rarity: 'rara',
+    goal: 45000,
+  },
+  {
+    code: 'round',
+    icon: '🏅',
+    name: 'Rodada de ouro',
+    description: 'Faça 10.000 pontos em uma única rodada.',
+    rarity: 'rara',
+    goal: 10000,
+  },
+  {
+    code: 'historian',
+    icon: '⏳',
+    name: 'Memória do tempo',
+    description: 'Acerte o ano das 5 rodadas na mesma partida, com erro zero.',
+    rarity: 'épica',
+    goal: 5,
   },
 ] as const
 
@@ -401,13 +451,16 @@ export function reconcileProgress(snapshot: RoomSnapshot, now = new Date()): Pro
       const evidence = `${match.title} · ${date}`
       grant(player.id, 'first', date, evidence)
       days.add(date)
+      if (days.size >= 10) grant(player.id, 'traveler', date, evidence)
       if (days.size >= 20) grant(player.id, 'explorer', date, evidence)
+      if (days.size >= 50) grant(player.id, 'veteran', date, evidence)
       const week = weekOf(date).from
       if (!weekDays.has(week)) weekDays.set(week, new Set())
       weekDays.get(week)!.add(date)
       if (weekDays.get(week)!.size >= 5) grant(player.id, 'regular', date, `Semana de ${week}`)
       if (best >= 0 && own.score > best) grant(player.id, 'personal', date, evidence)
       best = Math.max(best, own.score)
+      if (own.score >= 45000) grant(player.id, 'highscore', date, evidence)
       if (own.score === 50000) grant(player.id, 'perfect', date, evidence)
       const opponents = history.scores.filter((s) => s.match_id === match.id && s.player_id !== player.id)
       if (opponents.length) {
@@ -415,8 +468,12 @@ export function reconcileProgress(snapshot: RoomSnapshot, now = new Date()): Pro
         streak = win ? streak + 1 : 0
         if (win) grant(player.id, 'win', date, evidence)
         if (streak >= 3) grant(player.id, 'streak', date, evidence)
+        if (streak >= 13) grant(player.id, 'fazueli', date, `${evidence} · 13ª vitória seguida`)
       }
       const ownRounds = history.rounds.filter((r) => r.match_id === match.id && r.player_id === player.id)
+      if (ownRounds.some((r) => r.round_score === 10000)) grant(player.id, 'round', date, evidence)
+      if ([1, 2, 3, 4, 5].every((n) => ownRounds.some((r) => r.round_number === n && r.year_error === 0)))
+        grant(player.id, 'historian', date, evidence)
       if (ownRounds.some((r) => r.year_error === 0)) grant(player.id, 'year', date, evidence)
       if (ownRounds.some((r) => r.distance_km <= 1)) grant(player.id, 'map', date, evidence)
       for (const opponent of opponents) {
@@ -469,6 +526,8 @@ export function reconcileProgress(snapshot: RoomSnapshot, now = new Date()): Pro
     profile.featured = profile.featured.filter((code) => unlocked.has(code)).slice(0, 3)
     if (!unlocked.has(profile.title)) profile.title = ''
     if (!FRAMES.some((f) => f.id === profile.frame && f.need <= unlocked.size)) profile.frame = 'none'
+    const themeLock = THEMES.find((t) => t.id === profile.theme)?.achievement
+    if (themeLock && !unlocked.has(themeLock)) profile.theme = 'navy'
   }
   return state
 }
@@ -485,8 +544,38 @@ export function achievementProgress(
     (m) => m.played_at <= today && snapshot.scores.some((s) => s.match_id === m.id && s.player_id === playerId),
   )
   if (code === 'regular') return matches.filter((m) => m.played_at >= weekOf(today).from).length
-  if (code === 'explorer') return matches.length
-  if (code === 'streak') {
+  if (['first', 'traveler', 'explorer', 'veteran'].includes(code)) return matches.length
+  const matchIds = new Set(matches.map((m) => m.id))
+  if (code === 'highscore' || code === 'perfect')
+    return Math.max(
+      0,
+      ...snapshot.scores.filter((s) => s.player_id === playerId && matchIds.has(s.match_id)).map((s) => s.score),
+    )
+  if (code === 'round')
+    return Math.max(
+      0,
+      ...snapshot.rounds.filter((r) => r.player_id === playerId && matchIds.has(r.match_id)).map((r) => r.round_score),
+    )
+  if (code === 'historian')
+    return Math.max(
+      0,
+      ...matches.map(
+        (m) =>
+          new Set(
+            snapshot.rounds
+              .filter(
+                (r) =>
+                  r.player_id === playerId &&
+                  r.match_id === m.id &&
+                  r.round_number >= 1 &&
+                  r.round_number <= 5 &&
+                  r.year_error === 0,
+              )
+              .map((r) => r.round_number),
+          ).size,
+      ),
+    )
+  if (code === 'streak' || code === 'fazueli') {
     let streak = 0
     for (const m of [...matches].sort(compareMatchesOldest)) {
       const scores = snapshot.scores.filter((s) => s.match_id === m.id)
@@ -528,7 +617,8 @@ export function applyProgressCommand(
       (command.title && !unlocked.includes(command.title)) ||
       !Array.isArray(command.featured) ||
       command.featured.length > 3 ||
-      command.featured.some((c) => !unlocked.includes(c))
+      command.featured.some((c) => !unlocked.includes(c)) ||
+      THEMES.some((t) => t.id === command.theme && t.achievement && !unlocked.includes(t.achievement))
     )
       throw new Error('Escolha apenas itens já desbloqueados.')
     if (command.theme && !THEMES.some((t) => t.id === command.theme)) throw new Error('Tema inválido.')

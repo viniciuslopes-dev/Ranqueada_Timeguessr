@@ -10,6 +10,7 @@ import {
   reconcileProgress,
   rulesFor,
   sameJson,
+  shiftDay,
   validDay,
   weekClosed,
   weeklyStandings,
@@ -171,6 +172,61 @@ describe('campeonato semanal', () => {
 })
 
 describe('conquistas, personalização e rivalidades', () => {
+  it('concede marcos de 10 e 50 dias sem exigir sequência e ignora dias extras e futuros', () => {
+    const room = makeRoom()
+    for (let i = 0; i < 49; i++) match(room, shiftDay('2026-06-01', i * 2), [20000])
+    match(room, '2026-06-01', [50000], 'extra')
+    match(room, '2026-12-01', [50000], 'future')
+    let state = reconcileProgress(room, tuesday)
+    expect(state.earned.find((e) => e.code === 'traveler')?.date).toBe(shiftDay('2026-06-01', 18))
+    expect(state.earned.some((e) => e.code === 'veteran')).toBe(false)
+    expect(achievementProgress(room, 'a', 'veteran', '2026-09-22')).toBe(49)
+    match(room, '2026-09-21', [20000])
+    state = reconcileProgress(room, tuesday)
+    expect(state.earned.find((e) => e.code === 'veteran')?.date).toBe('2026-09-21')
+  })
+  it('mostra recorde real até 45 mil e 50 mil e revisa o selo após correção', () => {
+    const room = makeRoom()
+    match(room, '2026-09-14', [44999])
+    expect(achievementProgress(room, 'a', 'highscore', '2026-09-22')).toBe(44999)
+    expect(reconcileProgress(room, tuesday).earned.some((e) => e.code === 'highscore')).toBe(false)
+    const id = match(room, '2026-09-15', [45000])
+    room.progress = reconcileProgress(room, tuesday)
+    expect(room.progress.earned.some((e) => e.code === 'highscore')).toBe(true)
+    expect(achievementProgress(room, 'a', 'perfect', '2026-09-22')).toBe(45000)
+    room.scores.find((s) => s.match_id === id)!.score = 40000
+    expect(reconcileProgress(room, tuesday).earned.some((e) => e.code === 'highscore')).toBe(false)
+    match(room, '2026-09-16', [50000])
+    room.progress = reconcileProgress(room, tuesday)
+    expect(achievementProgress(room, 'a', 'perfect', '2026-09-22')).toBe(50000)
+  })
+  it('exige cinco anos exatos na mesma partida e uma rodada de dez mil registrada', () => {
+    const room = makeRoom()
+    const first = match(room, '2026-09-14', [40000])
+    const second = match(room, '2026-09-15', [40000])
+    const addRound = (id: string, n: number, score = 8000) =>
+      room.rounds.push({
+        id: `${id}:${n}`,
+        room_id: 'room',
+        match_id: id,
+        player_id: 'a',
+        round_number: n,
+        round_score: score,
+        year_error: 0,
+        distance_km: 10,
+        created_at: '',
+      })
+    for (let i = 1; i <= 4; i++) addRound(first, i)
+    addRound(second, 5)
+    expect(achievementProgress(room, 'a', 'historian', '2026-09-22')).toBe(4)
+    expect(achievementProgress(room, 'a', 'round', '2026-09-22')).toBe(8000)
+    expect(reconcileProgress(room, tuesday).earned.some((e) => ['historian', 'round'].includes(e.code))).toBe(false)
+    addRound(first, 5, 10000)
+    room.progress = reconcileProgress(room, tuesday)
+    expect(room.progress.earned.filter((e) => ['historian', 'round'].includes(e.code))).toHaveLength(2)
+    room.rounds.find((r) => r.match_id === first && r.round_number === 5)!.year_error = 1
+    expect(reconcileProgress(room, tuesday).earned.some((e) => e.code === 'historian')).toBe(false)
+  })
   it('não trata empate como revanche nem vitória por margem estreita', () => {
     const room = makeRoom()
     for (let i = 14; i < 17; i++) match(room, `2026-09-${i}`, [30000, 40000])
@@ -274,6 +330,45 @@ describe('conquistas, personalização e rivalidades', () => {
     expect(achievementProgress(room, 'a', 'regular', '2026-09-20')).toBe(4)
     match(room, '2026-09-20', [10000])
     expect(reconcileProgress(room, tuesday).earned.some((e) => e.code === 'regular')).toBe(true)
+  })
+  it('concede Fazueli só na 13ª vitória seguida e libera o fundo exclusivo', () => {
+    const room = makeRoom()
+    for (let day = 1; day <= 12; day++) match(room, `2026-09-${String(day).padStart(2, '0')}`, [40000, 30000])
+    const redCard = {
+      type: 'profile' as const,
+      avatar: '🦊',
+      frame: 'none',
+      title: 'fazueli',
+      featured: ['fazueli'],
+      theme: 'red',
+    }
+    expect(achievementProgress(room, 'a', 'fazueli', '2026-09-12')).toBe(12)
+    expect(reconcileProgress(room, tuesday).earned.some((e) => e.code === 'fazueli')).toBe(false)
+    expect(() => applyProgressCommand(room, 'a', { ...redCard, title: '', featured: [] }, tuesday)).toThrow(
+      'desbloqueados',
+    )
+    match(room, '2026-09-13', [40000, 30000])
+    const fazueli = reconcileProgress(room, tuesday).earned.find((e) => e.code === 'fazueli')
+    expect(fazueli).toMatchObject({ playerId: 'a', date: '2026-09-13' })
+    expect(applyProgressCommand(room, 'a', redCard, tuesday).profiles.a).toMatchObject({
+      theme: 'red',
+      title: 'fazueli',
+    })
+  })
+  it('uma derrota zera a sequência do Fazueli e a correção recolhe o fundo exclusivo', () => {
+    const room = makeRoom()
+    for (let day = 1; day <= 13; day++) match(room, `2026-09-${String(day).padStart(2, '0')}`, [40000, 30000])
+    room.progress = applyProgressCommand(
+      room,
+      'a',
+      { type: 'profile', avatar: '🦊', frame: 'none', title: 'fazueli', featured: [], theme: 'red' },
+      tuesday,
+    )
+    room.scores.find((s) => s.match_id === 'm6' && s.player_id === 'a')!.score = 1000
+    const corrected = reconcileProgress(room, tuesday)
+    expect(corrected.earned.some((e) => e.code === 'fazueli')).toBe(false)
+    expect(achievementProgress({ ...room, progress: corrected }, 'a', 'fazueli', '2026-09-13')).toBe(6)
+    expect(corrected.profiles.a).toMatchObject({ theme: 'navy', title: '' })
   })
   it('semanas não consecutivas não concedem bicampeonato', () => {
     const room = makeRoom()
